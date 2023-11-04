@@ -13,6 +13,9 @@ use config::parse_config;
 mod database;
 use database::{connect_db, run_embedded_migrations};
 
+mod models;
+mod schema;
+
 /// Responds with a pong
 #[poise::command(slash_command)]
 async fn ping(ctx: Context<'_>) -> Result<(), CommandError> {
