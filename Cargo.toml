@@ -9,6 +9,7 @@ diesel_migrations = "2.1.0"
 knuffel = "3.2.0"
 miette = { version = "5.10.0", features = ["fancy"] }
 poise = "0.5.7"
+thiserror = "1.0.50"
 
 [dependencies.serenity]
 version = "0.11.7"
