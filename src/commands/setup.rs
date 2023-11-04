@@ -25,6 +25,7 @@ pub async fn setup(
 	let settings = GuildSettings {
 		guild_id: guild.0 as i64,
 		publish_channel: embed_channel.id.0 as i64,
+		published_message_id: None,
 		partner_role: None,
 	};
 	let insert_result = diesel::insert_into(guild_settings::table)

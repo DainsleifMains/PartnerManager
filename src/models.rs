@@ -6,6 +6,7 @@ use diesel::prelude::*;
 pub struct GuildSettings {
 	pub guild_id: i64,
 	pub publish_channel: i64,
+	pub published_message_id: Option<i64>,
 	pub partner_role: Option<i64>,
 }
 
@@ -20,22 +21,27 @@ pub struct PartnerCategory {
 #[derive(Insertable, Queryable)]
 #[diesel(table_name = embed_data)]
 pub struct EmbedData {
-	guild: i64,
-	embed_part_sequence_number: i32,
-	partner_category_list: Option<String>,
-	embed_text: Option<String>,
+	pub guild: i64,
+	pub embed_part_sequence_number: i32,
+	pub partner_category_list: Option<String>,
+	pub embed_text: String,
+	pub image_url: String,
+	pub title: String,
+	pub author: String,
+	pub footer: String,
+	pub color: Option<i32>,
 }
 
 #[derive(Insertable, Queryable)]
 pub struct Partner {
-	partnership_id: String,
-	guild: i64,
-	partner_guild: i64,
-	partner_invite_link: String,
+	pub partnership_id: String,
+	pub guild: i64,
+	pub partner_guild: i64,
+	pub partner_invite_link: String,
 }
 
 #[derive(Insertable, Queryable)]
 pub struct PartnerUser {
-	partnership_id: String,
-	user_id: i64,
+	pub partnership_id: String,
+	pub user_id: i64,
 }

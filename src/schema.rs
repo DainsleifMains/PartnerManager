@@ -5,7 +5,12 @@ diesel::table! {
 		guild -> Int8,
 		embed_part_sequence_number -> Int4,
 		partner_category_list -> Nullable<Text>,
-		embed_text -> Nullable<Text>,
+		embed_text -> Text,
+		image_url -> Text,
+		title -> Text,
+		author -> Text,
+		footer -> Text,
+		color -> Nullable<Int4>,
 	}
 }
 
@@ -13,6 +18,7 @@ diesel::table! {
 	guild_settings (guild_id) {
 		guild_id -> Int8,
 		publish_channel -> Int8,
+		published_message_id -> Nullable<Int8>,
 		partner_role -> Nullable<Int8>,
 	}
 }

@@ -1,26 +1,28 @@
 CREATE TABLE guild_settings (
 	guild_id BIGINT PRIMARY KEY,
 	publish_channel BIGINT NOT NULL,
+	published_message_id BIGINT,
 	partner_role BIGINT
 );
 
 CREATE TABLE partner_categories (
 	id TEXT PRIMARY KEY,
 	guild_id BIGINT NOT NULL REFERENCES guild_settings,
-	name TEXT NOT NULL
+	name TEXT NOT NULL,
+	CONSTRAINT unique_category_per_guild UNIQUE (guild_id, name)
 );
 
 CREATE TABLE embed_data (
 	guild BIGINT NOT NULL REFERENCES guild_settings,
 	embed_part_sequence_number INTEGER NOT NULL,
 	partner_category_list TEXT REFERENCES partner_categories,
-	embed_text TEXT,
-	PRIMARY KEY (guild, embed_part_sequence_number),
-	CONSTRAINT has_embed_data CHECK(
-		(partner_category_list IS NOT NULL OR embed_text IS NOT NULL)
-		AND NOT
-		(partner_category_list IS NOT NULL AND embed_text IS NOT NULL)
-	)
+	embed_text TEXT NOT NULL,
+	image_url TEXT NOT NULL,
+	title TEXT NOT NULL,
+	author TEXT NOT NULL,
+	footer TEXT NOT NULL,
+	color INTEGER,
+	PRIMARY KEY (guild, embed_part_sequence_number)
 );
 
 CREATE TABLE partners (
