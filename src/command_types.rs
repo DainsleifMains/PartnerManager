@@ -17,4 +17,6 @@ pub enum CommandErrorValue {
 	BadGuild,
 	#[error("value was for the wrong guild")]
 	WrongGuild,
+	#[error("executed command but expected subcommand")]
+	BadParentCommand,
 }
