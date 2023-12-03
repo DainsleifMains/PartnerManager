@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-diesel = { version = "2.1.3", features = ["postgres"] }
+diesel = { version = "2.1.4", features = ["postgres"] }
 diesel_migrations = "2.1.0"
 knuffel = "3.2.0"
 miette = { version = "5.10.0", features = ["fancy"] }
@@ -16,7 +16,7 @@ version = "0.11.7"
 default-features = false
 
 [dependencies.tokio]
-version = "1.33.0"
+version = "1.34.0"
 features = [
 	"fs",
 	"macros",
