@@ -1,6 +1,6 @@
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 
-mod embed_channel;
+pub mod embed_channel;
 use embed_channel::embed_channel;
 
 /// Set or view settings for the server

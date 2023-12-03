@@ -3,7 +3,7 @@ use crate::models::GuildSettings;
 use crate::schema::guild_settings;
 use diesel::prelude::*;
 use miette::IntoDiagnostic;
-use serenity::model::channel::GuildChannel;
+use serenity::model::channel::{ChannelType, GuildChannel};
 use serenity::model::id::ChannelId;
 
 #[poise::command(prefix_command, slash_command)]
@@ -45,6 +45,17 @@ pub async fn embed_channel(
 		.into_diagnostic()?;
 		return Ok(());
 	};
+
+	if let Err(error_message) = validate_embed_channel(&embed_channel) {
+		ctx.send(|reply| {
+			reply.ephemeral = true;
+			reply.content = Some(error_message);
+			reply
+		})
+		.await
+		.into_diagnostic()?;
+		return Ok(());
+	}
 
 	let guild_settings: Option<GuildSettings> = guild_settings::table
 		.find(sql_guild_id)
@@ -102,7 +113,6 @@ pub async fn embed_channel(
 	// TODO: If we should_publish() (once that's written), publish the embed to that channel
 
 	ctx.send(|reply| {
-		reply.ephemeral = true;
 		reply.content = Some(format!(
 			"Updated embed channel from <#{}> to <#{}>!",
 			current_channel_id, embed_channel.id
@@ -112,5 +122,14 @@ pub async fn embed_channel(
 	.await
 	.into_diagnostic()?;
 
+	Ok(())
+}
+
+/// Validates the provided channel for use as a channel in which to post the partnership embed. Any error returned is a
+/// message suitable for responding to the user who issued the command that sets the channel.
+pub fn validate_embed_channel(channel: &GuildChannel) -> Result<(), String> {
+	if channel.kind != ChannelType::Text {
+		return Err(String::from("The embed channel must be a text channel."));
+	}
 	Ok(())
 }

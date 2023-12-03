@@ -1,3 +1,4 @@
+use super::settings::embed_channel::validate_embed_channel;
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::models::GuildSettings;
 use crate::schema::guild_settings;
@@ -19,6 +20,17 @@ pub async fn setup(
 	};
 	if guild != embed_channel.guild_id {
 		Err(CommandErrorValue::WrongGuild)?
+	}
+
+	if let Err(error_message) = validate_embed_channel(&embed_channel) {
+		ctx.send(|reply| {
+			reply.ephemeral = true;
+			reply.content = Some(error_message);
+			reply
+		})
+		.await
+		.into_diagnostic()?;
+		return Ok(());
 	}
 
 	let mut db_connection = ctx.data().db_connection.lock().await;
