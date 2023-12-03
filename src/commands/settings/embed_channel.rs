@@ -6,14 +6,6 @@ use miette::IntoDiagnostic;
 use serenity::model::channel::GuildChannel;
 use serenity::model::id::ChannelId;
 
-/// Set or view settings for the server
-///
-/// Allows setting all settings (required or optional) for the server.
-#[poise::command(slash_command, guild_only, subcommands("embed_channel"))]
-pub async fn settings(_ctx: Context<'_>) -> Result<(), CommandError> {
-	Err(CommandErrorValue::BadParentCommand)?
-}
-
 #[poise::command(prefix_command, slash_command)]
 pub async fn embed_channel(
 	ctx: Context<'_>,
