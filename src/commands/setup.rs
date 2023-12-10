@@ -10,7 +10,7 @@ use serenity::model::channel::GuildChannel;
 /// Set up the bot for a particular guild
 ///
 /// Takes all the data required to set up the bot for your Discord server.
-#[poise::command(slash_command, guild_only)]
+#[poise::command(slash_command, guild_only, default_member_permissions = "MANAGE_GUILD")]
 pub async fn setup(
 	ctx: Context<'_>,
 	#[description = "The channel in which to show the partnership embed"] embed_channel: GuildChannel,
