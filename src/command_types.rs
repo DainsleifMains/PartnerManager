@@ -14,7 +14,7 @@ pub type Context<'a> = poise::Context<'a, Data, CommandError>;
 #[derive(Debug, Diagnostic, Error)]
 pub enum CommandErrorValue {
 	#[error("expected guild in command data")]
-	BadGuild,
+	GuildExpected,
 	#[error("value was for the wrong guild")]
 	WrongGuild,
 	#[error("executed command but expected subcommand")]

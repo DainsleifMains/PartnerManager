@@ -16,7 +16,7 @@ pub async fn setup(
 	#[description = "The channel in which to show the partnership embed"] embed_channel: GuildChannel,
 ) -> Result<(), CommandError> {
 	let Some(guild) = ctx.guild_id() else {
-		Err(CommandErrorValue::BadGuild)?
+		Err(CommandErrorValue::GuildExpected)?
 	};
 	if guild != embed_channel.guild_id {
 		Err(CommandErrorValue::WrongGuild)?
