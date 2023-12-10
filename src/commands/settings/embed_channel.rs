@@ -6,11 +6,13 @@ use miette::IntoDiagnostic;
 use serenity::model::channel::{ChannelType, GuildChannel};
 use serenity::model::id::ChannelId;
 
+/// The channel to which the embed is published
 #[poise::command(slash_command, guild_only, subcommands("get", "set"))]
 pub async fn embed_channel(_ctx: Context<'_>) -> Result<(), CommandError> {
 	Err(CommandErrorValue::BadParentCommand)?
 }
 
+/// Get the channel to which the embed is published
 #[poise::command(slash_command, guild_only)]
 async fn get(ctx: Context<'_>) -> Result<(), CommandError> {
 	let Some(guild) = ctx.guild_id() else {
@@ -57,6 +59,7 @@ async fn get(ctx: Context<'_>) -> Result<(), CommandError> {
 	Ok(())
 }
 
+/// Change the channel to which the embed is published
 #[poise::command(slash_command, guild_only)]
 async fn set(
 	ctx: Context<'_>,
