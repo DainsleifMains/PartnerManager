@@ -6,45 +6,73 @@ use miette::IntoDiagnostic;
 use serenity::model::channel::{ChannelType, GuildChannel};
 use serenity::model::id::ChannelId;
 
-#[poise::command(prefix_command, slash_command)]
-pub async fn embed_channel(
+#[poise::command(slash_command, guild_only, subcommands("get", "set"))]
+pub async fn embed_channel(_ctx: Context<'_>) -> Result<(), CommandError> {
+	Err(CommandErrorValue::BadParentCommand)?
+}
+
+#[poise::command(slash_command, guild_only)]
+async fn get(ctx: Context<'_>) -> Result<(), CommandError> {
+	let Some(guild) = ctx.guild_id() else {
+		Err(CommandErrorValue::BadGuild)?
+	};
+
+	let mut db_connection = ctx.data().db_connection.lock().await;
+
+	let sql_guild_id = guild.0 as i64;
+
+	let embed_channel_id: Option<i64> = guild_settings::table
+		.find(sql_guild_id)
+		.select(guild_settings::publish_channel)
+		.first(&mut *db_connection)
+		.optional()
+		.into_diagnostic()?;
+	let embed_channel_id = match embed_channel_id {
+		Some(id) => id,
+		None => {
+			ctx.send(|reply| {
+				reply.ephemeral = true;
+				reply.content = Some(String::from(
+					"This server hasn't been set up yet; use `/setup` to set up this server.",
+				));
+				reply
+			})
+			.await
+			.into_diagnostic()?;
+			return Ok(());
+		}
+	};
+
+	ctx.send(|reply| {
+		reply.ephemeral = true;
+		reply.content = Some(format!(
+			"The partnership embed is published to <#{}>.",
+			embed_channel_id
+		));
+		reply
+	})
+	.await
+	.into_diagnostic()?;
+
+	Ok(())
+}
+
+#[poise::command(slash_command, guild_only)]
+async fn set(
 	ctx: Context<'_>,
-	#[description = "The channel in which to show the partnership embed"] embed_channel: Option<GuildChannel>,
+	#[description = "The channel in which to show the partnership embed"] embed_channel: GuildChannel,
 ) -> Result<(), CommandError> {
 	let Some(guild) = ctx.guild_id() else {
 		Err(CommandErrorValue::BadGuild)?
 	};
-	if let Some(channel) = embed_channel.as_ref() {
-		if guild != channel.guild_id {
-			Err(CommandErrorValue::WrongGuild)?
-		}
+	if guild != embed_channel.guild_id {
+		Err(CommandErrorValue::WrongGuild)?
 	}
 
 	let mut db_connection = ctx.data().db_connection.lock().await;
 
 	let guild_id = guild.0;
 	let sql_guild_id = guild_id as i64;
-
-	let Some(embed_channel) = embed_channel else {
-		let role: Option<i64> = guild_settings::table
-			.find(sql_guild_id)
-			.select(guild_settings::partner_role)
-			.first(&mut *db_connection)
-			.into_diagnostic()?;
-		let role = role.map(|id| id as u64);
-		ctx.send(|reply| {
-			reply.ephemeral = true;
-			reply.content = Some(if let Some(role_id) = role {
-				format!("The current partner role is <@{}>.", role_id)
-			} else {
-				String::from("There is no partner role.")
-			});
-			reply
-		})
-		.await
-		.into_diagnostic()?;
-		return Ok(());
-	};
 
 	if let Err(error_message) = validate_embed_channel(&embed_channel) {
 		ctx.send(|reply| {
