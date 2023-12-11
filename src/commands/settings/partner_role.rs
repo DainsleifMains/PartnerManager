@@ -4,6 +4,7 @@ use crate::schema::guild_settings;
 use crate::standard_replies::GUILD_NOT_SET_UP;
 use diesel::prelude::*;
 use miette::IntoDiagnostic;
+use poise::reply::CreateReply;
 use serenity::model::guild::Role;
 
 /// Manages the role partners should have
@@ -19,7 +20,7 @@ async fn get(ctx: Context<'_>) -> Result<(), CommandError> {
 		Err(CommandErrorValue::GuildExpected)?
 	};
 
-	let sql_guild_id = guild.0 as i64;
+	let sql_guild_id = guild.get() as i64;
 	let mut db_connection = ctx.data().db_connection.lock().await;
 
 	let role: Option<i64> = guild_settings::table
@@ -28,17 +29,16 @@ async fn get(ctx: Context<'_>) -> Result<(), CommandError> {
 		.first(&mut *db_connection)
 		.into_diagnostic()?;
 	let role = role.map(|id| id as u64);
-	ctx.send(|reply| {
-		reply.ephemeral = true;
-		reply.content = Some(if let Some(role_id) = role {
-			format!("The current partner role is <@{}>.", role_id)
-		} else {
-			String::from("There is no partner role.")
-		});
-		reply
-	})
-	.await
-	.into_diagnostic()?;
+
+	let mut reply = CreateReply::default();
+	if let Some(role_id) = role {
+		reply = reply.content(format!("The current partner role is <@{}>.", role_id));
+	} else {
+		reply = reply.content("There is no partner role.");
+	}
+	reply = reply.ephemeral(true);
+	ctx.send(reply).await.into_diagnostic()?;
+
 	Ok(())
 }
 
@@ -63,8 +63,8 @@ async fn update_role(ctx: Context<'_>, partner_role: Option<Role>) -> Result<(),
 		}
 	}
 
-	let sql_guild_id = guild.0 as i64;
-	let sql_role_id = partner_role.as_ref().map(|role| role.id.0 as i64);
+	let sql_guild_id = guild.get() as i64;
+	let sql_role_id = partner_role.as_ref().map(|role| role.id.get() as i64);
 
 	let mut db_connection = ctx.data().db_connection.lock().await;
 
@@ -80,24 +80,17 @@ async fn update_role(ctx: Context<'_>, partner_role: Option<Role>) -> Result<(),
 	match updated_settings {
 		Some(_) => {
 			let message = match partner_role.as_ref() {
-				Some(role) => format!("Updated the partner role to <@&{}>.", role.id.0),
+				Some(role) => format!("Updated the partner role to <@&{}>.", role.id.get()),
 				None => String::from("Removed partner role."),
 			};
-			ctx.send(|reply| {
-				reply.content = Some(message);
-				reply
-			})
-			.await
-			.into_diagnostic()?;
+			ctx.send(CreateReply::default().content(message))
+				.await
+				.into_diagnostic()?;
 		}
 		None => {
-			ctx.send(|reply| {
-				reply.ephemeral = true;
-				reply.content = Some(String::from(GUILD_NOT_SET_UP));
-				reply
-			})
-			.await
-			.into_diagnostic()?;
+			ctx.send(CreateReply::default().content(GUILD_NOT_SET_UP).ephemeral(true))
+				.await
+				.into_diagnostic()?;
 		}
 	}
 

@@ -1,5 +1,6 @@
 use miette::IntoDiagnostic;
 use poise::{Framework, FrameworkOptions};
+use serenity::client::ClientBuilder;
 use serenity::model::gateway::GatewayIntents;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -36,8 +37,6 @@ async fn main() -> miette::Result<()> {
 			commands,
 			..Default::default()
 		})
-		.token(&config.discord_bot_token)
-		.intents(GatewayIntents::GUILD_INTEGRATIONS)
 		.setup(|ctx, _ready, framework| {
 			Box::pin(async move {
 				poise::builtins::register_globally(ctx, &framework.options().commands)
@@ -45,7 +44,11 @@ async fn main() -> miette::Result<()> {
 					.into_diagnostic()?;
 				Ok(Data { db_connection })
 			})
-		});
+		})
+		.build();
 
-	framework.run().await.into_diagnostic()
+	let client = ClientBuilder::new(&config.discord_bot_token, GatewayIntents::GUILD_INTEGRATIONS)
+		.framework(framework)
+		.await;
+	client.into_diagnostic()?.start().await.into_diagnostic()
 }

@@ -5,6 +5,7 @@ use crate::schema::guild_settings;
 use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use miette::IntoDiagnostic;
+use poise::reply::CreateReply;
 use serenity::model::channel::GuildChannel;
 
 /// Set up the bot for a particular guild
@@ -23,20 +24,16 @@ pub async fn setup(
 	}
 
 	if let Err(error_message) = validate_embed_channel(&embed_channel) {
-		ctx.send(|reply| {
-			reply.ephemeral = true;
-			reply.content = Some(error_message);
-			reply
-		})
-		.await
-		.into_diagnostic()?;
+		ctx.send(CreateReply::default().content(error_message).ephemeral(true))
+			.await
+			.into_diagnostic()?;
 		return Ok(());
 	}
 
 	let mut db_connection = ctx.data().db_connection.lock().await;
 	let settings = GuildSettings {
-		guild_id: guild.0 as i64,
-		publish_channel: embed_channel.id.0 as i64,
+		guild_id: guild.get() as i64,
+		publish_channel: embed_channel.id.get() as i64,
 		published_message_id: None,
 		partner_role: None,
 	};
@@ -44,29 +41,21 @@ pub async fn setup(
 		.values(settings)
 		.execute(&mut *db_connection);
 	match insert_result {
-		Ok(_) => {
-			ctx.send(|reply| {
-				reply.content = Some(format!(
-					"Initial setup complete! Once fully configured, the partnership embed will be published to <#{}>.",
-					embed_channel.id.0
-				));
-				reply
-			})
+		Ok(_) => ctx
+			.send(CreateReply::default().content(format!(
+				"Initial setup complete! Once fully configured, the partnership embed will be published to <#{}>.",
+				embed_channel.id.get()
+			)))
 			.await
-			.into_diagnostic()?;
-		}
-		Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
-			ctx.send(|reply| {
-				reply.ephemeral = true;
-				reply.content = Some(String::from(
-					"This server has already been set up. See `/settings` to modify individual settings.",
-				));
-				reply
-			})
+			.into_diagnostic()?,
+		Err(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => ctx
+			.send(
+				CreateReply::default()
+					.content("This server has already been set up. See `/settings` to modify individual settings."),
+			)
 			.await
-			.into_diagnostic()?;
-		}
+			.into_diagnostic()?,
 		Err(error) => Err(error).into_diagnostic()?,
-	}
+	};
 	Ok(())
 }
