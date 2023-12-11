@@ -18,6 +18,7 @@ use database::{connect_db, run_embedded_migrations};
 
 mod models;
 mod schema;
+mod standard_replies;
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {

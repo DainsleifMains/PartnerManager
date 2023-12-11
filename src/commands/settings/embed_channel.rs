@@ -1,6 +1,7 @@
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::models::GuildSettings;
 use crate::schema::guild_settings;
+use crate::standard_replies::GUILD_NOT_SET_UP;
 use diesel::prelude::*;
 use miette::IntoDiagnostic;
 use serenity::model::channel::{ChannelType, GuildChannel};
@@ -34,9 +35,7 @@ async fn get(ctx: Context<'_>) -> Result<(), CommandError> {
 		None => {
 			ctx.send(|reply| {
 				reply.ephemeral = true;
-				reply.content = Some(String::from(
-					"This server hasn't been set up yet; use `/setup` to set up this server.",
-				));
+				reply.content = Some(String::from(GUILD_NOT_SET_UP));
 				reply
 			})
 			.await
@@ -97,9 +96,7 @@ async fn set(
 		Some(settings) => settings,
 		None => {
 			ctx.send(|reply| {
-				reply.content = Some(String::from(
-					"This server hasn't been set up yet; use `/setup` to set up this server.",
-				));
+				reply.content = Some(String::from(GUILD_NOT_SET_UP));
 				reply.ephemeral = true;
 				reply
 			})
