@@ -8,7 +8,10 @@ use poise::reply::CreateReply;
 
 /// Adds a partnership category with the provided name
 #[poise::command(slash_command, guild_only)]
-pub async fn add(ctx: Context<'_>, name: String) -> Result<(), CommandError> {
+pub async fn add(
+	ctx: Context<'_>,
+	#[description = "The name to give the new category"] name: String,
+) -> Result<(), CommandError> {
 	let Some(guild) = ctx.guild_id() else {
 		Err(CommandErrorValue::GuildExpected)?
 	};

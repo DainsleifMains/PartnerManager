@@ -10,7 +10,10 @@ use poise::reply::CreateReply;
 /// Deletes a partnership category for your server with a name matching the one provided with this command. Categories
 /// must be empty (have no partners) before they can be removed.
 #[poise::command(slash_command, guild_only)]
-pub async fn remove(ctx: Context<'_>, name: String) -> Result<(), CommandError> {
+pub async fn remove(
+	ctx: Context<'_>,
+	#[description = "The name of the category to remove"] name: String,
+) -> Result<(), CommandError> {
 	let Some(guild) = ctx.guild_id() else {
 		Err(CommandErrorValue::GuildExpected)?
 	};
