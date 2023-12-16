@@ -7,6 +7,7 @@ edition = "2021"
 cuid2 = "0.1.2"
 diesel = { version = "2.1.4", features = ["postgres"] }
 diesel_migrations = "2.1.0"
+futures = "0.3.29"
 knuffel = "3.2.0"
 miette = { version = "5.10.0", features = ["fancy"] }
 poise = "0.6.1-rc1"

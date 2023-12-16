@@ -2,8 +2,31 @@ use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::schema::partner_categories;
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind;
+use futures::Stream;
 use miette::IntoDiagnostic;
 use poise::reply::CreateReply;
+
+async fn autocomplete_name<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Item = String> + 'a {
+	let Some(guild) = ctx.guild_id() else {
+		return futures::stream::iter(Vec::new());
+	};
+
+	let sql_guild_id = guild.get() as i64;
+	let name_like = format!("{}%", partial);
+	let mut db_connection = ctx.data().db_connection.lock().await;
+
+	let names: Vec<String> = partner_categories::table
+		.filter(
+			partner_categories::guild_id
+				.eq(sql_guild_id)
+				.and(partner_categories::name.like(name_like)),
+		)
+		.select(partner_categories::name)
+		.load(&mut *db_connection)
+		.unwrap_or_default();
+
+	futures::stream::iter(names)
+}
 
 /// Deletes a partnership category with the given name
 ///
@@ -12,7 +35,9 @@ use poise::reply::CreateReply;
 #[poise::command(slash_command, guild_only)]
 pub async fn remove(
 	ctx: Context<'_>,
-	#[description = "The name of the category to remove"] name: String,
+	#[description = "The name of the category to remove"]
+	#[autocomplete = "autocomplete_name"]
+	name: String,
 ) -> Result<(), CommandError> {
 	let Some(guild) = ctx.guild_id() else {
 		Err(CommandErrorValue::GuildExpected)?
