@@ -42,6 +42,7 @@ diesel::table! {
 	partners (partnership_id) {
 		partnership_id -> Text,
 		guild -> Int8,
+		category -> Text,
 		partner_guild -> Int8,
 		partner_invite_link -> Text,
 	}
@@ -52,5 +53,6 @@ diesel::joinable!(embed_data -> partner_categories (partner_category_list));
 diesel::joinable!(partner_categories -> guild_settings (guild_id));
 diesel::joinable!(partner_users -> partners (partnership_id));
 diesel::joinable!(partners -> guild_settings (guild));
+diesel::joinable!(partners -> partner_categories (category));
 
 diesel::allow_tables_to_appear_in_same_query!(embed_data, guild_settings, partner_categories, partner_users, partners,);

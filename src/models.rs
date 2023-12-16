@@ -36,6 +36,7 @@ pub struct EmbedData {
 pub struct Partner {
 	pub partnership_id: String,
 	pub guild: i64,
+	pub category: String,
 	pub partner_guild: i64,
 	pub partner_invite_link: String,
 }
