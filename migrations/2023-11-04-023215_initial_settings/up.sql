@@ -34,7 +34,8 @@ CREATE TABLE partners (
 	partner_guild BIGINT NOT NULL,
 	display_name TEXT NOT NULL,
 	partner_invite_link TEXT NOT NULL,
-	CONSTRAINT unique_partner_guild UNIQUE (guild, partner_guild)
+	CONSTRAINT unique_partner_guild UNIQUE (guild, partner_guild),
+	CONSTRAINT unique_partner_display_name UNIQUE (guild, display_name)
 );
 
 CREATE TABLE partner_users (
