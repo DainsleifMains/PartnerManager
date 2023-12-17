@@ -6,7 +6,7 @@ use futures::Stream;
 use miette::IntoDiagnostic;
 use poise::reply::CreateReply;
 
-async fn autocomplete_name<'a>(ctx: Context<'_>, partial: &'a str) -> impl Stream<Item = String> + 'a {
+async fn autocomplete_name(ctx: Context<'_>, partial: &str) -> impl Stream<Item = String> {
 	let Some(guild) = ctx.guild_id() else {
 		return futures::stream::iter(Vec::new());
 	};
