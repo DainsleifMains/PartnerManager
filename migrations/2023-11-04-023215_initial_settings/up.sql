@@ -32,6 +32,7 @@ CREATE TABLE partners (
 	guild BIGINT NOT NULL REFERENCES guild_settings,
 	category TEXT NOT NULL REFERENCES partner_categories,
 	partner_guild BIGINT NOT NULL,
+	display_name TEXT NOT NULL,
 	partner_invite_link TEXT NOT NULL,
 	CONSTRAINT unique_partner_guild UNIQUE (guild, partner_guild)
 );

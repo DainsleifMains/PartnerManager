@@ -45,6 +45,7 @@ diesel::table! {
 		guild -> Int8,
 		category -> Text,
 		partner_guild -> Int8,
+		display_name -> Text,
 		partner_invite_link -> Text,
 	}
 }

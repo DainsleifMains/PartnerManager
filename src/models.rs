@@ -39,6 +39,7 @@ pub struct Partner {
 	pub guild: i64,
 	pub category: String,
 	pub partner_guild: i64,
+	pub display_name: String,
 	pub partner_invite_link: String,
 }
 
