@@ -1,7 +1,7 @@
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::models::GuildSettings;
 use crate::schema::guild_settings;
-use crate::standard_replies::GUILD_NOT_SET_UP;
+use crate::utils::GUILD_NOT_SET_UP;
 use diesel::prelude::*;
 use miette::IntoDiagnostic;
 use poise::reply::CreateReply;

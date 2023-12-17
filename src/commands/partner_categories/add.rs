@@ -1,6 +1,7 @@
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::models::PartnerCategory;
 use crate::schema::partner_categories;
+use crate::utils::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind;
 use miette::IntoDiagnostic;
@@ -16,9 +17,12 @@ pub async fn add(
 		Err(CommandErrorValue::GuildExpected)?
 	};
 
-	let sql_guild_id = guild.get() as i64;
-
 	let mut db_connection = ctx.data().db_connection.lock().await;
+	if !guild_setup_check_with_reply(ctx, guild, &mut db_connection).await? {
+		return Ok(());
+	}
+
+	let sql_guild_id = guild.get() as i64;
 
 	let new_category_id = cuid2::create_id();
 	let new_category = PartnerCategory {

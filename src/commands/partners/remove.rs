@@ -1,5 +1,6 @@
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::schema::partners;
+use crate::utils::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use futures::Stream;
 use miette::IntoDiagnostic;
@@ -38,6 +39,9 @@ pub async fn remove(
 
 	let sql_guild_id = guild.get() as i64;
 	let mut db_connection = ctx.data().db_connection.lock().await;
+	if !guild_setup_check_with_reply(ctx, guild, &mut db_connection).await? {
+		return Ok(());
+	}
 
 	let delete_result = diesel::delete(partners::table)
 		.filter(

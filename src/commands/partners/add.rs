@@ -1,6 +1,7 @@
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::models::{Partner, PartnerCategory};
 use crate::schema::{partner_categories, partners};
+use crate::utils::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind;
 use futures::Stream;
@@ -43,6 +44,10 @@ pub async fn add(
 	};
 
 	let sql_guild_id = guild.get() as i64;
+	let mut db_connection = ctx.data().db_connection.lock().await;
+	if !guild_setup_check_with_reply(ctx, guild, &mut db_connection).await? {
+		return Ok(());
+	}
 
 	let invite_code = parse_invite(&invite_link);
 	let invite = match Invite::get(ctx, invite_code, false, true, None).await {
@@ -80,8 +85,6 @@ pub async fn add(
 		None => partner_guild.name,
 	};
 	let partner_guild = partner_guild.id;
-
-	let mut db_connection = ctx.data().db_connection.lock().await;
 
 	let category: QueryResult<PartnerCategory> = partner_categories::table
 		.filter(
