@@ -15,6 +15,7 @@ CREATE TABLE partner_categories (
 CREATE TABLE embed_data (
 	guild BIGINT NOT NULL REFERENCES guild_settings,
 	embed_part_sequence_number INTEGER NOT NULL,
+	embed_name TEXT NOT NULL,
 	partner_category_list TEXT REFERENCES partner_categories,
 	embed_text TEXT NOT NULL,
 	image_url TEXT NOT NULL,
@@ -22,7 +23,8 @@ CREATE TABLE embed_data (
 	author TEXT NOT NULL,
 	footer TEXT NOT NULL,
 	color INTEGER,
-	PRIMARY KEY (guild, embed_part_sequence_number)
+	PRIMARY KEY (guild, embed_part_sequence_number),
+	CONSTRAINT unique_embed_name_per_guild UNIQUE (guild, embed_name)
 );
 
 CREATE TABLE partners (

@@ -23,6 +23,7 @@ pub struct PartnerCategory {
 pub struct EmbedData {
 	pub guild: i64,
 	pub embed_part_sequence_number: i32,
+	pub embed_name: String,
 	pub partner_category_list: Option<String>,
 	pub embed_text: String,
 	pub image_url: String,

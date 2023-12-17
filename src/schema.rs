@@ -4,6 +4,7 @@ diesel::table! {
 	embed_data (guild, embed_part_sequence_number) {
 		guild -> Int8,
 		embed_part_sequence_number -> Int4,
+		embed_name -> Text,
 		partner_category_list -> Nullable<Text>,
 		embed_text -> Text,
 		image_url -> Text,
