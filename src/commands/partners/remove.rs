@@ -1,36 +1,17 @@
 use crate::command_types::{CommandError, CommandErrorValue, Context};
 use crate::schema::partners;
+use crate::utils::autocomplete::partner_display_name;
 use crate::utils::guild_setup_check_with_reply;
 use diesel::prelude::*;
-use futures::Stream;
 use miette::IntoDiagnostic;
 use poise::reply::CreateReply;
-
-async fn autocomplete_partner_display_name(ctx: Context<'_>, partial: &str) -> impl Stream<Item = String> {
-	let Some(guild) = ctx.guild_id() else {
-		return futures::stream::iter(Vec::new());
-	};
-
-	let sql_guild_id = guild.get() as i64;
-	let mut db_connection = ctx.data().db_connection.lock().await;
-
-	let search_results: QueryResult<Vec<String>> = partners::table
-		.filter(
-			partners::guild
-				.eq(sql_guild_id)
-				.and(partners::display_name.like(format!("{}%", partial))),
-		)
-		.select(partners::display_name)
-		.load(&mut *db_connection);
-	futures::stream::iter(search_results.unwrap_or_default())
-}
 
 /// Removes a partner from the partner list
 #[poise::command(slash_command, guild_only)]
 pub async fn remove(
 	ctx: Context<'_>,
 	#[description = "The display name of the partner to remove"]
-	#[autocomplete = "autocomplete_partner_display_name"]
+	#[autocomplete = "partner_display_name"]
 	partner_display_name: String,
 ) -> Result<(), CommandError> {
 	let Some(guild) = ctx.guild_id() else {
