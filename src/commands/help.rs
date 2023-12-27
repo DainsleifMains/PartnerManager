@@ -6,7 +6,7 @@ use poise::builtins::HelpConfiguration;
 #[poise::command(slash_command)]
 pub async fn help(ctx: Context<'_>, command: Option<String>) -> Result<(), CommandError> {
 	let config = HelpConfiguration {
-		ephemeral: true,
+		ephemeral: ctx.guild_id().is_some(),
 		..Default::default()
 	};
 	poise::builtins::help(ctx, command.as_deref(), config)
