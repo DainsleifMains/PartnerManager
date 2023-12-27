@@ -1,0 +1,77 @@
+use crate::command_types::{CommandError, CommandErrorValue, Context};
+use crate::models::PartnerUser;
+use crate::schema::{partner_users, partners};
+use crate::utils::autocomplete::partner_display_name;
+use diesel::prelude::*;
+use diesel::result::{DatabaseErrorKind, Error as DbError};
+use miette::IntoDiagnostic;
+use poise::reply::CreateReply;
+use serenity::model::id::UserId;
+
+/// Adds a user as a partner representative for a partner server
+#[poise::command(slash_command, guild_only)]
+pub async fn add_rep(
+	ctx: Context<'_>,
+	#[description = "The partner server for which to add the representative"]
+	#[autocomplete = "partner_display_name"]
+	partner_display_name: String,
+	#[description = "The user to add as a representative"] user: UserId,
+) -> Result<(), CommandError> {
+	let Some(guild) = ctx.guild_id() else {
+		Err(CommandErrorValue::GuildExpected)?
+	};
+
+	let mut db_connection = ctx.data().db_connection.lock().await;
+	let sql_guild_id = guild.get() as i64;
+
+	let partnership_id: Option<String> = partners::table
+		.filter(
+			partners::guild
+				.eq(sql_guild_id)
+				.and(partners::display_name.eq(&partner_display_name)),
+		)
+		.select(partners::partnership_id)
+		.first(&mut *db_connection)
+		.optional()
+		.into_diagnostic()?;
+	let Some(partnership_id) = partnership_id else {
+		let mut reply = CreateReply::default();
+		reply = reply.ephemeral(true);
+		reply = reply.content(format!("You have no partner named `{}`.", partner_display_name));
+		ctx.send(reply).await.into_diagnostic()?;
+		return Ok(());
+	};
+
+	let partner_user = PartnerUser {
+		partnership_id,
+		user_id: user.get() as i64,
+	};
+	let insert_result = diesel::insert_into(partner_users::table)
+		.values(partner_user)
+		.execute(&mut *db_connection);
+	
+	// TODO add role to user
+
+	let mut reply = CreateReply::default();
+	match insert_result {
+		Ok(_) => {
+			reply = reply.content(format!(
+				"Added <@{}> as a partner for `{}`.",
+				user.get(),
+				partner_display_name
+			))
+		}
+		Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+			reply = reply.ephemeral(true);
+			reply = reply.content(format!(
+				"<@{}> is already a partner for `{}`.",
+				user.get(),
+				partner_display_name
+			));
+		}
+		Err(error) => Err(error).into_diagnostic()?,
+	}
+	ctx.send(reply).await.into_diagnostic()?;
+
+	Ok(())
+}

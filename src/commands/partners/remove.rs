@@ -33,6 +33,9 @@ pub async fn remove(
 		.execute(&mut *db_connection)
 		.into_diagnostic()?;
 
+	// TODO update embed
+	// TODO role sync
+
 	let mut reply = CreateReply::default();
 	if delete_result == 0 {
 		reply = reply.ephemeral(true);
