@@ -6,6 +6,9 @@ use add::add;
 mod remove;
 use remove::remove;
 
+mod set_category;
+use set_category::set_category;
+
 mod set_name;
 use set_name::set_name;
 
@@ -14,7 +17,7 @@ use set_name::set_name;
 	slash_command,
 	guild_only,
 	default_member_permissions = "MANAGE_GUILD",
-	subcommands("add", "remove", "set_name")
+	subcommands("add", "remove", "set_category", "set_name")
 )]
 pub async fn partners(_ctx: Context<'_>) -> Result<(), CommandError> {
 	Err(CommandErrorValue::BadParentCommand)?
