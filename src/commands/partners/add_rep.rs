@@ -7,7 +7,7 @@ use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DbError};
 use miette::IntoDiagnostic;
 use poise::reply::CreateReply;
-use serenity::http::HttpError;
+use serenity::http::{ErrorResponse, HttpError, StatusCode};
 use serenity::model::guild::Guild;
 use serenity::model::id::UserId;
 use serenity::prelude::SerenityError;
@@ -77,12 +77,12 @@ pub async fn add_rep(
 		let member = guild_data.member(ctx, user).await.into_diagnostic()?;
 		if !member.roles.iter().any(|role| role.get() == partner_role_id) {
 			let add_role_result = member.add_role(ctx, partner_role_id).await;
-			if let Err(SerenityError::Http(HttpError::UnsuccessfulRequest(response))) = &add_role_result {
-				if response.status_code.as_u16() == 403 {
-					complain_about_role_permissions = true;
-				} else {
-					add_role_result.into_diagnostic()?
-				}
+			if let Err(SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
+				status_code: StatusCode::FORBIDDEN,
+				..
+			}))) = &add_role_result
+			{
+				complain_about_role_permissions = true;
 			} else {
 				add_role_result.into_diagnostic()?
 			}

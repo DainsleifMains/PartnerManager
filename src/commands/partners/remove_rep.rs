@@ -6,7 +6,7 @@ use diesel::dsl::count_star;
 use diesel::prelude::*;
 use miette::IntoDiagnostic;
 use poise::reply::CreateReply;
-use serenity::http::HttpError;
+use serenity::http::{ErrorResponse, HttpError, StatusCode};
 use serenity::model::guild::Guild;
 use serenity::model::id::UserId;
 use serenity::prelude::SerenityError;
@@ -94,25 +94,26 @@ pub async fn remove_rep(
 				Ok(member) => {
 					if member.roles.iter().any(|role| role.get() == partner_role_id) {
 						let remove_role_result = member.remove_role(ctx, partner_role_id).await;
-						if let Err(SerenityError::Http(HttpError::UnsuccessfulRequest(response))) = &remove_role_result
+						if let Err(SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
+							status_code: StatusCode::FORBIDDEN,
+							..
+						}))) = &remove_role_result
 						{
-							if response.status_code.as_u16() == 403 {
-								complain_about_role_permissions = true;
-							} else {
-								remove_role_result.into_diagnostic()?
-							}
+							complain_about_role_permissions = true;
 						} else {
 							remove_role_result.into_diagnostic()?
 						}
 					}
 				}
-				Err(SerenityError::Http(HttpError::UnsuccessfulRequest(response))) => {
-					// If 404, user is no longer a member, so just ignore
-					if response.status_code.as_u16() != 404 {
-						Err(SerenityError::Http(HttpError::UnsuccessfulRequest(response))).into_diagnostic()?
+				Err(error) => {
+					match error {
+						SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
+							status_code: StatusCode::NOT_FOUND,
+							..
+						})) => (), // If 404, user is no longer a member, so just ignore
+						_ => Err(error).into_diagnostic()?,
 					}
 				}
-				Err(error) => Err(error).into_diagnostic()?,
 			}
 		}
 	}
