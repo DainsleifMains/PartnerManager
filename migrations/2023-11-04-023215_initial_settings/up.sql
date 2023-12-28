@@ -1,7 +1,6 @@
 CREATE TABLE guild_settings (
 	guild_id BIGINT PRIMARY KEY,
 	publish_channel BIGINT NOT NULL,
-	published_message_id BIGINT,
 	partner_role BIGINT
 );
 
@@ -42,4 +41,10 @@ CREATE TABLE partner_users (
 	partnership_id TEXT NOT NULL REFERENCES partners ON DELETE CASCADE,
 	user_id BIGINT NOT NULL,
 	PRIMARY KEY (partnership_id, user_id)
+);
+
+CREATE TABLE published_messages (
+	guild_id BIGINT NOT NULL REFERENCES guild_settings,
+	message_id BIGINT NOT NULL,
+	PRIMARY KEY (guild_id, message_id)
 );

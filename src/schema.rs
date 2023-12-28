@@ -19,7 +19,6 @@ diesel::table! {
 	guild_settings (guild_id) {
 		guild_id -> Int8,
 		publish_channel -> Int8,
-		published_message_id -> Nullable<Int8>,
 		partner_role -> Nullable<Int8>,
 	}
 }
@@ -50,11 +49,26 @@ diesel::table! {
 	}
 }
 
+diesel::table! {
+	published_messages (guild_id, message_id) {
+		guild_id -> Int8,
+		message_id -> Int8,
+	}
+}
+
 diesel::joinable!(embed_data -> guild_settings (guild));
 diesel::joinable!(embed_data -> partner_categories (partner_category_list));
 diesel::joinable!(partner_categories -> guild_settings (guild_id));
 diesel::joinable!(partner_users -> partners (partnership_id));
 diesel::joinable!(partners -> guild_settings (guild));
 diesel::joinable!(partners -> partner_categories (category));
+diesel::joinable!(published_messages -> guild_settings (guild_id));
 
-diesel::allow_tables_to_appear_in_same_query!(embed_data, guild_settings, partner_categories, partner_users, partners,);
+diesel::allow_tables_to_appear_in_same_query!(
+	embed_data,
+	guild_settings,
+	partner_categories,
+	partner_users,
+	partners,
+	published_messages,
+);
