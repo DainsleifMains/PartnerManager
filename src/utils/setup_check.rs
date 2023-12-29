@@ -9,7 +9,7 @@ use serenity::model::id::GuildId;
 pub const GUILD_NOT_SET_UP: &str = "This server hasn't been set up yet; use `/setup` to set up this server.";
 
 /// Checks whether a guild has set up the bot. Only necessary if the guild_settings table isn't queried anyway.
-pub fn guild_is_set_up(guild: GuildId, db_connection: &mut PgConnection) -> QueryResult<bool> {
+fn guild_is_set_up(guild: GuildId, db_connection: &mut PgConnection) -> QueryResult<bool> {
 	let sql_guild_id = guild.get() as i64;
 	let guild_count: i64 = guild_settings::table
 		.filter(guild_settings::guild_id.eq(sql_guild_id))
@@ -18,6 +18,8 @@ pub fn guild_is_set_up(guild: GuildId, db_connection: &mut PgConnection) -> Quer
 	Ok(guild_count > 0)
 }
 
+/// Checks whether a guild has set up the bot. Automatically replies with the standard response if the server isn't set
+/// up. Only necessary if the guild_settings table isn't queried anyway.
 pub async fn guild_setup_check_with_reply(
 	ctx: Context<'_>,
 	guild: GuildId,
