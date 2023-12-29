@@ -8,9 +8,6 @@ diesel::table! {
 		partner_category_list -> Nullable<Text>,
 		embed_text -> Text,
 		image_url -> Text,
-		title -> Text,
-		author -> Text,
-		footer -> Text,
 		color -> Nullable<Int4>,
 	}
 }

@@ -18,9 +18,6 @@ CREATE TABLE embed_data (
 	partner_category_list TEXT REFERENCES partner_categories,
 	embed_text TEXT NOT NULL,
 	image_url TEXT NOT NULL,
-	title TEXT NOT NULL,
-	author TEXT NOT NULL,
-	footer TEXT NOT NULL,
 	color INTEGER,
 	PRIMARY KEY (guild, embed_part_sequence_number),
 	CONSTRAINT unique_embed_name_per_guild UNIQUE (guild, embed_name)

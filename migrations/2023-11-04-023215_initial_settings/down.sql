@@ -1,3 +1,4 @@
+DROP TABLE published_messages;
 DROP TABLE partner_users;
 DROP TABLE partners;
 DROP TABLE embed_data;

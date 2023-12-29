@@ -26,9 +26,6 @@ pub struct EmbedData {
 	pub partner_category_list: Option<String>,
 	pub embed_text: String,
 	pub image_url: String,
-	pub title: String,
-	pub author: String,
-	pub footer: String,
 	pub color: Option<i32>,
 }
 
