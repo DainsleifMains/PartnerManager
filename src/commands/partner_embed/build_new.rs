@@ -94,12 +94,10 @@ pub async fn build_new(ctx: Context<'_>) -> Result<(), CommandError> {
 				if data.data.custom_id == submit_id {
 					break data;
 				}
-				if data.data.custom_id == cancel_id {
-					data.create_response(ctx, CreateInteractionResponse::Acknowledge)
-						.await
-						.into_diagnostic()?;
-					return Ok(());
-				}
+				data.create_response(ctx, CreateInteractionResponse::Acknowledge)
+					.await
+					.into_diagnostic()?;
+				return Ok(());
 			}
 			_ => (),
 		}
@@ -195,6 +193,7 @@ pub async fn build_new(ctx: Context<'_>) -> Result<(), CommandError> {
 		.into_diagnostic()?;
 	let next_embed_number = last_embed_number.unwrap_or(0) + 1;
 	let embed_data = EmbedData {
+		id: cuid2::create_id(),
 		guild: sql_guild_id,
 		embed_part_sequence_number: next_embed_number,
 		embed_name: name.clone(),

@@ -1,7 +1,8 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-	embed_data (guild, embed_part_sequence_number) {
+	embed_data (id) {
+		id -> Text,
 		guild -> Int8,
 		embed_part_sequence_number -> Int4,
 		embed_name -> Text,

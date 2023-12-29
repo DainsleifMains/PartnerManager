@@ -20,6 +20,7 @@ pub struct PartnerCategory {
 #[derive(Insertable, Queryable)]
 #[diesel(table_name = embed_data)]
 pub struct EmbedData {
+	pub id: String,
 	pub guild: i64,
 	pub embed_part_sequence_number: i32,
 	pub embed_name: String,
