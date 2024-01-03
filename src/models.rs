@@ -37,7 +37,7 @@ pub struct Partner {
 	pub category: String,
 	pub partner_guild: i64,
 	pub display_name: String,
-	pub partner_invite_link: String,
+	pub invite_code: String,
 }
 
 #[derive(Insertable, Queryable)]

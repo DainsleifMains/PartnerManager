@@ -246,15 +246,17 @@ pub async fn execute(
 		category: partner_category,
 		partner_guild: partner_guild.get() as i64,
 		display_name: display_name.clone(),
-		partner_invite_link: invite_link.to_string(),
+		invite_code: invite_code.to_string(),
 	};
 	let insert_result: QueryResult<_> = diesel::insert_into(partners::table)
 		.values(new_partner)
 		.execute(&mut *db_connection);
 
 	let message = match insert_result {
-		Ok(_) => CreateInteractionResponseMessage::new()
-			.content(format!("Added [{}]({}) as a partner!", display_name, invite_link)),
+		Ok(_) => CreateInteractionResponseMessage::new().content(format!(
+			"Added [{}](https://discord.gg/{}) as a partner!",
+			display_name, invite_code
+		)),
 		Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, violation_info)) => {
 			let message = match violation_info.constraint_name() {
 				Some("unique_partner_guild") => "That server is already a partner.",
