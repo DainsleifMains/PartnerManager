@@ -1,139 +1,329 @@
-use crate::command_types::{CommandError, CommandErrorValue, Context};
+use crate::database::get_database_connection;
+use crate::models::Partner;
 use crate::schema::{guild_settings, partner_users, partners};
-use crate::utils::autocomplete::partner_display_name;
-use crate::utils::GUILD_NOT_SET_UP;
+use crate::utils::setup_check::GUILD_NOT_SET_UP;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
-use miette::IntoDiagnostic;
-use poise::reply::CreateReply;
+use miette::{bail, IntoDiagnostic};
+use serenity::builder::{
+	CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
+	CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
+};
+use serenity::client::Context;
+use serenity::collector::ComponentInteractionCollector;
 use serenity::http::{ErrorResponse, HttpError, StatusCode};
+use serenity::model::application::{
+	ButtonStyle, CommandInteraction, ComponentInteraction, ComponentInteractionDataKind,
+};
 use serenity::model::guild::Guild;
 use serenity::model::id::UserId;
 use serenity::prelude::SerenityError;
+use std::time::Duration;
 
-/// Removes a representative for a partner
-#[poise::command(slash_command, guild_only)]
-pub async fn remove_rep(
-	ctx: Context<'_>,
-	#[description = "The partner for which to remove the representative"]
-	#[autocomplete = "partner_display_name"]
-	partner_display_name: String,
-	#[description = "The user to remove as a representative"] user: UserId,
-) -> Result<(), CommandError> {
-	let Some(guild) = ctx.guild_id() else {
-		Err(CommandErrorValue::GuildExpected)?
+pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
+	let Some(guild) = command.guild_id else {
+		bail!("Partners command used outside of a guild");
 	};
 
-	let mut db_connection = ctx.data().db_connection.lock().await;
 	let sql_guild_id = guild.get() as i64;
-
-	let partner_role_id: Option<Option<i64>> = guild_settings::table
-		.find(sql_guild_id)
-		.select(guild_settings::partner_role)
-		.first(&mut *db_connection)
-		.optional()
-		.into_diagnostic()?;
-	let partner_role_id = match partner_role_id {
-		Some(id) => id.map(|id| id as u64),
-		None => {
-			let mut reply = CreateReply::default();
-			reply = reply.ephemeral(true);
-			reply = reply.content(GUILD_NOT_SET_UP);
-			ctx.send(reply).await.into_diagnostic()?;
+	let db_connection = get_database_connection(ctx).await;
+	let (partner_role_id, partners) = {
+		let mut db_connection = db_connection.lock().await;
+		let role_id: Option<Option<i64>> = guild_settings::table
+			.find(sql_guild_id)
+			.select(guild_settings::partner_role)
+			.first(&mut *db_connection)
+			.optional()
+			.into_diagnostic()?;
+		let Some(role_id) = role_id else {
+			let message = CreateInteractionResponseMessage::new()
+				.ephemeral(true)
+				.content(GUILD_NOT_SET_UP);
+			command
+				.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+				.await
+				.into_diagnostic()?;
 			return Ok(());
+		};
+		let role_id = role_id.map(|id| id as u64);
+
+		let partners: Vec<Partner> = partners::table
+			.filter(partners::guild.eq(sql_guild_id))
+			.load(&mut *db_connection)
+			.into_diagnostic()?;
+
+		(role_id, partners)
+	};
+
+	let partner_select_id = cuid2::create_id();
+	let rep_select_id = cuid2::create_id();
+	let submit_button_id = cuid2::create_id();
+	let cancel_button_id = cuid2::create_id();
+
+	let partner_select_options: Vec<CreateSelectMenuOption> = partners
+		.iter()
+		.map(|partner| CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id))
+		.collect();
+
+	let partner_select = CreateSelectMenu::new(
+		&partner_select_id,
+		CreateSelectMenuKind::String {
+			options: partner_select_options,
+		},
+	)
+	.placeholder("Partner");
+	let rep_select = CreateSelectMenu::new(&rep_select_id, CreateSelectMenuKind::String { options: Vec::new() })
+		.placeholder("Representative user")
+		.disabled(true);
+	let submit_button = CreateButton::new(&submit_button_id)
+		.label("Submit")
+		.style(ButtonStyle::Danger)
+		.disabled(true);
+	let cancel_button = CreateButton::new(&cancel_button_id)
+		.label("Cancel")
+		.style(ButtonStyle::Secondary);
+
+	let partner_row = CreateActionRow::SelectMenu(partner_select);
+	let rep_row = CreateActionRow::SelectMenu(rep_select);
+	let buttons_row = CreateActionRow::Buttons(vec![submit_button, cancel_button]);
+
+	let message = CreateInteractionResponseMessage::new()
+		.ephemeral(true)
+		.content("Choose the partner server and the representative for that server to remove as a representative:")
+		.components(vec![partner_row, rep_row, buttons_row]);
+	command
+		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+		.await
+		.into_diagnostic()?;
+
+	let mut partnership_id = String::new();
+	let mut user_id = String::new();
+
+	let interaction: ComponentInteraction = loop {
+		let Some(interaction) = ComponentInteractionCollector::new(&ctx.shard)
+			.custom_ids(vec![
+				partner_select_id.clone(),
+				rep_select_id.clone(),
+				submit_button_id.clone(),
+				cancel_button_id.clone(),
+			])
+			.timeout(Duration::from_secs(120))
+			.await
+		else {
+			let message = EditInteractionResponse::new()
+				.content("No representatives were removed.")
+				.components(Vec::new());
+			command.edit_response(&ctx.http, message).await.into_diagnostic()?;
+			return Ok(());
+		};
+
+		match &interaction.data.kind {
+			ComponentInteractionDataKind::StringSelect { values } => {
+				let value = values.first().cloned().unwrap_or_default();
+				if interaction.data.custom_id == partner_select_id {
+					partnership_id = value;
+					interaction
+						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
+						.await
+						.into_diagnostic()?;
+
+					let mut db_connection = db_connection.lock().await;
+					let partner_rep_ids: Vec<i64> = partner_users::table
+						.filter(partner_users::partnership_id.eq(&partnership_id))
+						.select(partner_users::user_id)
+						.load(&mut *db_connection)
+						.into_diagnostic()?;
+					let partner_rep_ids: Vec<u64> = partner_rep_ids.into_iter().map(|user_id| user_id as u64).collect();
+					let mut partner_reps: Vec<(u64, String)> = Vec::with_capacity(partner_rep_ids.len());
+					for rep_id in partner_rep_ids {
+						let name = match guild.member(&ctx.http, rep_id).await {
+							Ok(member) => match member.nick {
+								Some(nick) => nick,
+								None => match member.user.global_name {
+									Some(name) => name,
+									None => member.user.name,
+								},
+							},
+							Err(SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
+								status_code: StatusCode::NOT_FOUND,
+								..
+							}))) => match UserId::new(rep_id).to_user(&ctx.http).await {
+								Ok(user) => match user.global_name {
+									Some(name) => name,
+									None => user.name,
+								},
+								Err(error) => bail!(error),
+							},
+							Err(error) => bail!(error),
+						};
+						partner_reps.push((rep_id, name));
+					}
+
+					let partner_select_options: Vec<CreateSelectMenuOption> = partners
+						.iter()
+						.map(|partner| {
+							CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id)
+								.default_selection(partner.partnership_id == partnership_id)
+						})
+						.collect();
+					let rep_select_options: Vec<CreateSelectMenuOption> = partner_reps
+						.into_iter()
+						.map(|(rep_id, rep_name)| CreateSelectMenuOption::new(rep_name, rep_id.to_string()))
+						.collect();
+
+					let partner_select = CreateSelectMenu::new(
+						&partner_select_id,
+						CreateSelectMenuKind::String {
+							options: partner_select_options,
+						},
+					)
+					.placeholder("Partner");
+					let rep_select = CreateSelectMenu::new(
+						&rep_select_id,
+						CreateSelectMenuKind::String {
+							options: rep_select_options,
+						},
+					)
+					.placeholder("Representative user");
+					let submit_button = CreateButton::new(&submit_button_id)
+						.label("Submit")
+						.style(ButtonStyle::Danger);
+					let cancel_button = CreateButton::new(&cancel_button_id)
+						.label("Cancel")
+						.style(ButtonStyle::Secondary);
+
+					let partner_row = CreateActionRow::SelectMenu(partner_select);
+					let rep_row = CreateActionRow::SelectMenu(rep_select);
+					let buttons_row = CreateActionRow::Buttons(vec![submit_button, cancel_button]);
+
+					let new_message =
+						EditInteractionResponse::new().components(vec![partner_row, rep_row, buttons_row]);
+					command.edit_response(&ctx.http, new_message).await.into_diagnostic()?;
+				} else if interaction.data.custom_id == rep_select_id {
+					user_id = value;
+					interaction
+						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
+						.await
+						.into_diagnostic()?;
+				}
+			}
+			ComponentInteractionDataKind::Button => {
+				if interaction.data.custom_id == submit_button_id {
+					break interaction;
+				}
+				if interaction.data.custom_id == cancel_button_id {
+					let message = CreateInteractionResponseMessage::new()
+						.ephemeral(true)
+						.content("Canceled partner representative removal.");
+					interaction
+						.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+						.await
+						.into_diagnostic()?;
+					return Ok(());
+				}
+			}
+			_ => bail!(
+				"Unexpected interaction type received for partners remove_rep command: {:?}",
+				interaction.data.kind
+			),
 		}
 	};
 
-	let partnership_id: Option<String> = partners::table
-		.filter(
-			partners::guild
-				.eq(sql_guild_id)
-				.and(partners::display_name.eq(&partner_display_name)),
-		)
-		.select(partners::partnership_id)
-		.first(&mut *db_connection)
-		.optional()
-		.into_diagnostic()?;
-	let Some(partnership_id) = partnership_id else {
-		let mut reply = CreateReply::default();
-		reply = reply.ephemeral(true);
-		reply = reply.content(format!("You have no partner named `{}`.", partner_display_name));
-		ctx.send(reply).await.into_diagnostic()?;
+	if partnership_id.is_empty() {
+		let message = CreateInteractionResponseMessage::new()
+			.ephemeral(true)
+			.content("No partner representative removed; no partner selected.");
+		interaction
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
 		return Ok(());
+	}
+	if user_id.is_empty() {
+		let message = CreateInteractionResponseMessage::new()
+			.ephemeral(true)
+			.content("No partner representative removed; no representative selected.");
+		interaction
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
+		return Ok(());
+	}
+
+	let user_id: u64 = user_id.parse().into_diagnostic()?;
+	let sql_user_id = user_id as i64;
+	let mut db_connection = db_connection.lock().await;
+
+	let mut complain_about_role_permissions = false;
+	if let Some(partner_role_id) = partner_role_id {
+		let remaining_representing: i64 = partner_users::table
+			.filter(
+				partner_users::partnership_id
+					.eq_any(
+						partners::table
+							.filter(partners::guild.eq(sql_guild_id))
+							.select(partners::partnership_id),
+					)
+					.and(partner_users::user_id.eq(sql_user_id)),
+			)
+			.select(count_star())
+			.first(&mut *db_connection)
+			.into_diagnostic()?;
+		if remaining_representing == 0 {
+			let guild_data = Guild::get(&ctx.http, guild).await.into_diagnostic()?;
+			let member = guild_data.member(&ctx.http, user_id).await;
+			match member {
+				Ok(member) => {
+					if member.roles.iter().any(|role| role.get() == partner_role_id) {
+						let remove_role_result = member.remove_role(&ctx.http, partner_role_id).await;
+						match remove_role_result {
+							Ok(_) => (),
+							Err(SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
+								status_code: StatusCode::FORBIDDEN,
+								..
+							}))) => complain_about_role_permissions = true,
+							Err(error) => bail!(error),
+						}
+					}
+				}
+				Err(SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
+					status_code: StatusCode::NOT_FOUND,
+					..
+				}))) => (),
+				Err(error) => bail!(error),
+			}
+		}
+	}
+
+	let partner_display_name = partners
+		.iter()
+		.find(|partner| partner.partnership_id == partnership_id)
+		.map(|partner| partner.display_name.clone());
+	let Some(partner_display_name) = partner_display_name else {
+		bail!("Partner selections desynchronized with partner list");
 	};
 
-	let sql_user_id = user.get() as i64;
-	let delete_count = diesel::delete(partner_users::table)
+	diesel::delete(partner_users::table)
 		.filter(
 			partner_users::partnership_id
-				.eq(partnership_id)
+				.eq(&partnership_id)
 				.and(partner_users::user_id.eq(sql_user_id)),
 		)
 		.execute(&mut *db_connection)
 		.into_diagnostic()?;
 
-	let mut complain_about_role_permissions = false;
-	if let Some(partner_role_id) = partner_role_id {
-		let partners_represented: i64 = partner_users::table
-			.filter(
-				partner_users::user_id.eq(sql_user_id).and(
-					partner_users::partnership_id.eq_any(
-						partners::table
-							.filter(partners::guild.eq(sql_guild_id))
-							.select(partners::partnership_id),
-					),
-				),
-			)
-			.select(count_star())
-			.first(&mut *db_connection)
-			.into_diagnostic()?;
-		if partners_represented == 0 {
-			let guild_data = Guild::get(ctx, guild).await.into_diagnostic()?;
-			let member = guild_data.member(ctx, user).await;
-			match member {
-				Ok(member) => {
-					if member.roles.iter().any(|role| role.get() == partner_role_id) {
-						let remove_role_result = member.remove_role(ctx, partner_role_id).await;
-						if let Err(SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
-							status_code: StatusCode::FORBIDDEN,
-							..
-						}))) = &remove_role_result
-						{
-							complain_about_role_permissions = true;
-						} else {
-							remove_role_result.into_diagnostic()?
-						}
-					}
-				}
-				Err(error) => {
-					match error {
-						SerenityError::Http(HttpError::UnsuccessfulRequest(ErrorResponse {
-							status_code: StatusCode::NOT_FOUND,
-							..
-						})) => (), // If 404, user is no longer a member, so just ignore
-						_ => Err(error).into_diagnostic()?,
-					}
-				}
-			}
-		}
-	}
-
-	let mut reply = CreateReply::default();
-	let mut reply_content = if delete_count == 0 {
-		reply = reply.ephemeral(true);
-		format!(
-			"<@{}> wasn't a partner representative for `{}`.",
-			user.get(),
-			partner_display_name
-		)
-	} else {
-		format!("Removed <@{}> as a partner for `{}`.", user.get(), partner_display_name)
-	};
+	let mut message_content = format!(
+		"Removed <@{}> as a representative for {}.",
+		user_id, partner_display_name
+	);
 	if complain_about_role_permissions {
-		reply_content = format!("{}\n**The bot does not have the correct permissions to update partner roles. You will need to remove the partner role manually.**", reply_content);
+		message_content = format!("{}\n**The bot does not have the correct permissions to update partner roles. You will need to remove the partner role manually.**", message_content);
 	}
-	reply = reply.content(reply_content);
-	ctx.send(reply).await.into_diagnostic()?;
+	let message = CreateInteractionResponseMessage::new().content(message_content);
+	interaction
+		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+		.await
+		.into_diagnostic()?;
 
 	Ok(())
 }

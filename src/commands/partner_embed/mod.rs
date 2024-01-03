@@ -1,17 +1,47 @@
-use crate::command_types::{CommandError, CommandErrorValue, Context};
+use miette::{bail, ensure, Severity};
+use serenity::builder::{CreateCommand, CreateCommandOption};
+use serenity::client::Context;
+use serenity::model::application::{CommandInteraction, CommandOptionType, CommandType};
+use serenity::model::permissions::Permissions;
 
 mod build_new;
-use build_new::build_new;
-
 mod edit_category;
-use edit_category::edit_category;
 
-#[poise::command(
-	slash_command,
-	guild_only,
-	default_member_permissions = "MANAGE_GUILD",
-	subcommands("build_new", "edit_category")
-)]
-pub async fn partner_embed(_ctx: Context<'_>) -> Result<(), CommandError> {
-	Err(CommandErrorValue::BadParentCommand)?
+pub fn definition() -> CreateCommand {
+	let build_new_subcommand = CreateCommandOption::new(
+		CommandOptionType::SubCommand,
+		"build_new",
+		"Opens a builder form to create a new embed",
+	);
+	let edit_category_subcommand = CreateCommandOption::new(
+		CommandOptionType::SubCommand,
+		"edit_category",
+		"Edits the partner category for an embed",
+	);
+
+	CreateCommand::new("partner_embed")
+		.kind(CommandType::ChatInput)
+		.default_member_permissions(Permissions::MANAGE_GUILD)
+		.dm_permission(false)
+		.description("Manage the embed listing partners")
+		.add_option(build_new_subcommand)
+		.add_option(edit_category_subcommand)
+}
+
+pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
+	let options = command.data.options();
+	ensure!(
+		!options.is_empty(),
+		severity = Severity::Error,
+		"Subcommands not passed to the partner_embed command"
+	);
+	let subcommand = &options[0];
+	match subcommand.name {
+		"build_new" => build_new::execute(ctx, command).await,
+		"edit_category" => edit_category::execute(ctx, command).await,
+		_ => bail!(
+			"Unexpected subcommand passed to the partner_embed command: {:?}",
+			subcommand
+		),
+	}
 }

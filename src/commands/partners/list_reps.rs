@@ -1,65 +1,127 @@
-use crate::command_types::{CommandError, CommandErrorValue, Context};
+use crate::database::get_database_connection;
+use crate::models::Partner;
 use crate::schema::{partner_users, partners};
-use crate::utils::autocomplete::partner_display_name;
-use crate::utils::guild_setup_check_with_reply;
+use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
-use miette::IntoDiagnostic;
-use poise::reply::CreateReply;
+use miette::{bail, IntoDiagnostic};
+use serenity::builder::{
+	CreateActionRow, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
+	CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
+};
+use serenity::client::Context;
+use serenity::collector::ComponentInteractionCollector;
+use serenity::model::application::{CommandInteraction, ComponentInteraction, ComponentInteractionDataKind};
+use std::time::Duration;
 
-/// Lists representatives for a particular partner server
-#[poise::command(slash_command, guild_only)]
-pub async fn list_reps(
-	ctx: Context<'_>,
-	#[description = "Name of the partner server"]
-	#[autocomplete = "partner_display_name"]
-	partner_server_name: String,
-) -> Result<(), CommandError> {
-	let Some(guild) = ctx.guild_id() else {
-		Err(CommandErrorValue::GuildExpected)?
+pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
+	let Some(guild) = command.guild_id else {
+		bail!("Partners command used outside of a guild");
 	};
 
-	let mut db_connection = ctx.data().db_connection.lock().await;
-	if !guild_setup_check_with_reply(ctx, guild, &mut db_connection).await? {
-		return Ok(());
-	}
 	let sql_guild_id = guild.get() as i64;
+	let db_connection = get_database_connection(ctx).await;
+	let partners: Vec<Partner> = {
+		let mut db_connection = db_connection.lock().await;
+		if !guild_setup_check_with_reply(ctx, command, guild, &mut db_connection).await? {
+			return Ok(());
+		}
 
-	let partnership_id: Option<String> = partners::table
+		partners::table
+			.filter(partners::guild.eq(sql_guild_id))
+			.load(&mut *db_connection)
+			.into_diagnostic()?
+	};
+
+	let partner_select_options: Vec<CreateSelectMenuOption> = partners
+		.iter()
+		.map(|partner| CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id))
+		.collect();
+
+	let partner_select_id = cuid2::create_id();
+	let partner_select = CreateSelectMenu::new(
+		&partner_select_id,
+		CreateSelectMenuKind::String {
+			options: partner_select_options,
+		},
+	);
+	let partner_row = CreateActionRow::SelectMenu(partner_select);
+
+	let message = CreateInteractionResponseMessage::new()
+		.ephemeral(true)
+		.content("Choose the partner for which to list representatives.")
+		.components(vec![partner_row]);
+	command
+		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+		.await
+		.into_diagnostic()?;
+
+	let (interaction, partner_id): (ComponentInteraction, String) = loop {
+		let Some(interaction) = ComponentInteractionCollector::new(&ctx.shard)
+			.custom_ids(vec![partner_select_id.clone()])
+			.timeout(Duration::from_secs(30))
+			.await
+		else {
+			let message = EditInteractionResponse::new()
+				.content("Selection timed out.")
+				.components(Vec::new());
+			command.edit_response(&ctx.http, message).await.into_diagnostic()?;
+			return Ok(());
+		};
+		match &interaction.data.kind {
+			ComponentInteractionDataKind::StringSelect { values } => {
+				let value = values.first().cloned().unwrap_or_default();
+				if interaction.data.custom_id == partner_select_id {
+					break (interaction, value);
+				}
+			}
+			_ => bail!(
+				"Unexpected interaction occurred in partner list_reps command: {:?}",
+				interaction.data.kind
+			),
+		}
+	};
+
+	let mut db_connection = db_connection.lock().await;
+	let partner_data: Option<Partner> = partners::table
 		.filter(
-			partners::guild
-				.eq(sql_guild_id)
-				.and(partners::display_name.eq(&partner_server_name)),
+			partners::partnership_id
+				.eq(&partner_id)
+				.and(partners::guild.eq(sql_guild_id)),
 		)
-		.select(partners::partnership_id)
 		.first(&mut *db_connection)
 		.optional()
 		.into_diagnostic()?;
-	let Some(partnership_id) = partnership_id else {
-		let mut reply = CreateReply::default();
-		reply = reply.ephemeral(true);
-		reply = reply.content(format!("You have no partner server named `{}`.", partner_server_name));
-		ctx.send(reply).await.into_diagnostic()?;
+	let Some(partner_data) = partner_data else {
+		let message = CreateInteractionResponseMessage::new()
+			.ephemeral(true)
+			.content("The selected partner is not valid.");
+		interaction
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
 		return Ok(());
 	};
 
 	let rep_user_ids: Vec<i64> = partner_users::table
-		.filter(partner_users::partnership_id.eq(partnership_id))
+		.filter(partner_users::partnership_id.eq(&partner_id))
 		.select(partner_users::user_id)
 		.load(&mut *db_connection)
 		.into_diagnostic()?;
 
-	let reply_content = if rep_user_ids.is_empty() {
-		format!("There are no representatives for `{}`.", partner_server_name)
+	let message_content = if rep_user_ids.is_empty() {
+		format!("There are no representatives for {}.", partner_data.display_name)
 	} else {
-		let mut message_parts = vec![format!("Partner representatives for `{}`:", partner_server_name)];
-		for user_id in rep_user_ids.iter() {
-			let user_id = *user_id as u64;
-			message_parts.push(format!("\n- <@{}>", user_id));
+		let mut message_lines = vec![format!("Partner representatives for {}:", partner_data.display_name)];
+		for user_id in rep_user_ids {
+			let user_id = user_id as u64;
+			message_lines.push(format!("- <@{}>", user_id));
 		}
-		message_parts.join("")
+		message_lines.join("\n")
 	};
 
-	ctx.send(CreateReply::default().content(reply_content))
+	let message = CreateInteractionResponseMessage::new().content(message_content);
+	interaction
+		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await
 		.into_diagnostic()?;
 

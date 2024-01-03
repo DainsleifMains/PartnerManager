@@ -1,44 +1,41 @@
-use crate::command_types::{CommandError, CommandErrorValue, Context};
-use crate::models::PartnerCategory;
+use crate::database::get_database_connection;
 use crate::schema::partner_categories;
-use crate::utils::guild_setup_check_with_reply;
+use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
-use miette::IntoDiagnostic;
-use poise::reply::CreateReply;
+use miette::{bail, IntoDiagnostic};
+use serenity::builder::{CreateInteractionResponse, CreateInteractionResponseMessage};
+use serenity::client::Context;
+use serenity::model::application::CommandInteraction;
 
-/// Lists partner categories that have been created for this server
-#[poise::command(slash_command, guild_only)]
-pub async fn list(ctx: Context<'_>) -> Result<(), CommandError> {
-	let Some(guild) = ctx.guild_id() else {
-		Err(CommandErrorValue::GuildExpected)?
+pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
+	let Some(guild) = command.guild_id else {
+		bail!("Partner categories list command was run outside of a guild context");
 	};
 
 	let sql_guild_id = guild.get() as i64;
-
-	let mut db_connection = ctx.data().db_connection.lock().await;
-	if !guild_setup_check_with_reply(ctx, guild, &mut db_connection).await? {
+	let db_connection = get_database_connection(ctx).await;
+	let mut db_connection = db_connection.lock().await;
+	if !guild_setup_check_with_reply(ctx, command, guild, &mut db_connection).await? {
 		return Ok(());
 	}
 
-	let categories: Vec<PartnerCategory> = partner_categories::table
+	let category_names: Vec<String> = partner_categories::table
 		.filter(partner_categories::guild_id.eq(sql_guild_id))
+		.select(partner_categories::name)
 		.load(&mut *db_connection)
 		.into_diagnostic()?;
+	let mut message_lines = vec![String::from("The following partner categories have been set up:")];
+	for name in category_names {
+		message_lines.push(format!("- {}", name));
+	}
 
-	let visible_categories: Vec<String> = categories
-		.iter()
-		.map(|category| format!("- {}", category.name))
-		.collect();
-
-	let message = format!(
-		"The following partner categories have been set up:\n\n{}",
-		visible_categories.join("\n")
-	);
-
-	let mut reply = CreateReply::default();
-	reply = reply.ephemeral(true);
-	reply = reply.content(message);
-	ctx.send(reply).await.into_diagnostic()?;
+	let message = CreateInteractionResponseMessage::new()
+		.ephemeral(true)
+		.content(message_lines.join("\n"));
+	command
+		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+		.await
+		.into_diagnostic()?;
 
 	Ok(())
 }

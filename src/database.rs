@@ -2,11 +2,20 @@ use crate::config::ConfigDocument;
 use diesel::prelude::*;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use miette::{Diagnostic, IntoDiagnostic};
+use serenity::client::Context;
+use serenity::prelude::TypeMapKey;
 use std::error::Error;
 use std::fmt::Display;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+
+pub struct DatabaseConnection;
+
+impl TypeMapKey for DatabaseConnection {
+	type Value = Arc<Mutex<PgConnection>>;
+}
 
 // To get boxed errors (as returned by the migration runner) into miette, we need a wrapper type for them
 #[derive(Debug, Diagnostic)]
@@ -48,4 +57,9 @@ pub fn run_embedded_migrations(db_connection: &mut PgConnection) -> Result<(), M
 		Ok(_) => Ok(()),
 		Err(error) => Err(MigrationError(error)),
 	}
+}
+
+/// Gets the database connection from the Serenity context
+pub async fn get_database_connection(ctx: &Context) -> Arc<Mutex<PgConnection>> {
+	Arc::clone(ctx.data.read().await.get::<DatabaseConnection>().unwrap())
 }
