@@ -38,91 +38,97 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 			.into_diagnostic()?
 	};
 
-	let partner_category_options: Vec<CreateSelectMenuOption> = partner_categories
-		.iter()
-		.map(|category| CreateSelectMenuOption::new(&category.name, &category.id))
-		.collect();
+	let (partner_category, category_interaction) = if partner_categories.is_empty() {
+		(String::new(), None)
+	} else {
+		let partner_category_options: Vec<CreateSelectMenuOption> = partner_categories
+			.iter()
+			.map(|category| CreateSelectMenuOption::new(&category.name, &category.id))
+			.collect();
 
-	let category_select_id = cuid2::create_id();
-	let submit_button_id = cuid2::create_id();
-	let cancel_button_id = cuid2::create_id();
+		let category_select_id = cuid2::create_id();
+		let submit_button_id = cuid2::create_id();
+		let cancel_button_id = cuid2::create_id();
 
-	let category_select = CreateSelectMenu::new(
-		&category_select_id,
-		CreateSelectMenuKind::String {
-			options: partner_category_options,
-		},
-	);
-	let submit_button = CreateButton::new(&submit_button_id)
-		.label("Continue")
-		.style(ButtonStyle::Primary);
-	let cancel_button = CreateButton::new(&cancel_button_id)
-		.label("Cancel")
-		.style(ButtonStyle::Secondary);
+		let category_select = CreateSelectMenu::new(
+			&category_select_id,
+			CreateSelectMenuKind::String {
+				options: partner_category_options,
+			},
+		);
+		let submit_button = CreateButton::new(&submit_button_id)
+			.label("Continue")
+			.style(ButtonStyle::Primary);
+		let cancel_button = CreateButton::new(&cancel_button_id)
+			.label("Cancel")
+			.style(ButtonStyle::Secondary);
 
-	let category_row = CreateActionRow::SelectMenu(category_select);
-	let buttons_row = CreateActionRow::Buttons(vec![submit_button, cancel_button]);
+		let category_row = CreateActionRow::SelectMenu(category_select);
+		let buttons_row = CreateActionRow::Buttons(vec![submit_button, cancel_button]);
 
-	let message = CreateInteractionResponseMessage::new().ephemeral(true).content("# Create New Embed\n\nFirst, if this embed is for displaying a particular partner category, select that category here. Otherwise, leave the selection blank. Either way, click \"Continue\" to continue building the embed.").components(vec![category_row, buttons_row]);
-	command
-		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-		.await
-		.into_diagnostic()?;
-
-	let mut category_id = String::new();
-
-	let category_interaction: ComponentInteraction = loop {
-		let Some(interaction) = ComponentInteractionCollector::new(&ctx.shard)
-			.custom_ids(vec![
-				category_select_id.clone(),
-				submit_button_id.clone(),
-				cancel_button_id.clone(),
-			])
-			.timeout(Duration::from_secs(30))
+		let message = CreateInteractionResponseMessage::new().ephemeral(true).content("# Create New Embed\n\nFirst, if this embed is for displaying a particular partner category, select that category here. Otherwise, leave the selection blank. Either way, click \"Continue\" to continue building the embed.").components(vec![category_row, buttons_row]);
+		command
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 			.await
-		else {
-			let message = EditInteractionResponse::new()
-				.content("Embed was not created.")
-				.components(Vec::new());
-			command.edit_response(&ctx.http, message).await.into_diagnostic()?;
-			return Ok(());
-		};
-		match &interaction.data.kind {
-			ComponentInteractionDataKind::StringSelect { values } => {
-				let value = values.first().cloned().unwrap_or_default();
-				if interaction.data.custom_id == category_select_id {
-					category_id = value;
-					interaction
-						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
-						.await
-						.into_diagnostic()?;
-				}
-			}
-			ComponentInteractionDataKind::Button => {
-				if interaction.data.custom_id == submit_button_id {
-					break interaction;
-				}
-				if interaction.data.custom_id == cancel_button_id {
-					let message = CreateInteractionResponseMessage::new()
-						.ephemeral(true)
-						.content("Embed was not created.");
-					interaction
-						.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-						.await
-						.into_diagnostic()?;
-					return Ok(());
-				}
-			}
-			_ => bail!(
-				"Unexpected interaction data type received by partner_embed build_new command: {:?}",
-				interaction.data.kind
-			),
-		}
-	};
+			.into_diagnostic()?;
 
-	if !category_id.is_empty() && !partner_categories.iter().any(|category| category.id == category_id) {
-		bail!("Partner category selection desynchronized with the partner category list");
-	}
+		let mut category_id = String::new();
+
+		let category_interaction: ComponentInteraction = loop {
+			let Some(interaction) = ComponentInteractionCollector::new(&ctx.shard)
+				.custom_ids(vec![
+					category_select_id.clone(),
+					submit_button_id.clone(),
+					cancel_button_id.clone(),
+				])
+				.timeout(Duration::from_secs(30))
+				.await
+			else {
+				let message = EditInteractionResponse::new()
+					.content("Embed was not created.")
+					.components(Vec::new());
+				command.edit_response(&ctx.http, message).await.into_diagnostic()?;
+				return Ok(());
+			};
+			match &interaction.data.kind {
+				ComponentInteractionDataKind::StringSelect { values } => {
+					let value = values.first().cloned().unwrap_or_default();
+					if interaction.data.custom_id == category_select_id {
+						category_id = value;
+						interaction
+							.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
+							.await
+							.into_diagnostic()?;
+					}
+				}
+				ComponentInteractionDataKind::Button => {
+					if interaction.data.custom_id == submit_button_id {
+						break interaction;
+					}
+					if interaction.data.custom_id == cancel_button_id {
+						let message = CreateInteractionResponseMessage::new()
+							.ephemeral(true)
+							.content("Embed was not created.");
+						interaction
+							.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+							.await
+							.into_diagnostic()?;
+						return Ok(());
+					}
+				}
+				_ => bail!(
+					"Unexpected interaction data type received by partner_embed build_new command: {:?}",
+					interaction.data.kind
+				),
+			}
+		};
+
+		if !category_id.is_empty() && !partner_categories.iter().any(|category| category.id == category_id) {
+			bail!("Partner category selection desynchronized with the partner category list");
+		}
+
+		(category_id, Some(category_interaction))
+	};
 
 	let name_input = CreateInputText::new(InputTextStyle::Short, "Embed Name", "")
 		.placeholder("Internal name for the embed; used for reference later")
@@ -143,7 +149,12 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		.field(embed_text_input)
 		.field(image_url_input)
 		.field(color_input);
-	let modal_response = category_interaction.quick_modal(ctx, modal).await.into_diagnostic()?;
+	let modal_response = if let Some(interaction) = category_interaction {
+		interaction.quick_modal(ctx, modal).await
+	} else {
+		command.quick_modal(ctx, modal).await
+	}
+	.into_diagnostic()?;
 
 	let Some(modal_response) = modal_response else {
 		return Ok(());
@@ -187,10 +198,10 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		guild: sql_guild_id,
 		embed_part_sequence_number: next_embed_number,
 		embed_name: name.clone(),
-		partner_category_list: if category_id.is_empty() {
+		partner_category_list: if partner_category.is_empty() {
 			None
 		} else {
-			Some(category_id)
+			Some(partner_category)
 		},
 		embed_text,
 		image_url,

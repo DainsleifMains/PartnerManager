@@ -40,6 +40,28 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		(embeds, categories)
 	};
 
+	if embeds.is_empty() {
+		let message = CreateInteractionResponseMessage::new()
+			.ephemeral(true)
+			.content("There are no embeds to edit.");
+		command
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
+		return Ok(());
+	}
+
+	if categories.is_empty() {
+		let message = CreateInteractionResponseMessage::new()
+			.ephemeral(true)
+			.content("You have no partner categories to add to messages.");
+		command
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
+		return Ok(());
+	}
+
 	let embed_select_options: Vec<CreateSelectMenuOption> = embeds
 		.iter()
 		.map(|embed| CreateSelectMenuOption::new(&embed.embed_name, &embed.id))
