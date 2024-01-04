@@ -20,6 +20,79 @@ use serenity::model::id::UserId;
 use serenity::prelude::SerenityError;
 use std::time::Duration;
 
+struct ComponentsData<'a> {
+	partners: &'a [Partner],
+	reps: &'a [(u64, String)],
+	current_partner_id: &'a str,
+	current_user_id: &'a str,
+	partner_select_id: &'a str,
+	rep_select_id: &'a str,
+	submit_button_id: &'a str,
+	cancel_button_id: &'a str,
+}
+
+fn components_to_display(component_data: ComponentsData) -> Vec<CreateActionRow> {
+	let ComponentsData {
+		partners,
+		reps,
+		current_partner_id,
+		current_user_id,
+		partner_select_id,
+		rep_select_id,
+		submit_button_id,
+		cancel_button_id,
+	} = component_data;
+
+	let partner_select_options: Vec<CreateSelectMenuOption> = partners
+		.iter()
+		.map(|partner| {
+			CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id)
+				.default_selection(partner.partnership_id == *current_partner_id)
+		})
+		.collect();
+	let rep_select_options: Vec<CreateSelectMenuOption> = reps
+		.iter()
+		.map(|(rep_id, rep_name)| {
+			CreateSelectMenuOption::new(rep_name.clone(), rep_id.to_string())
+				.default_selection(rep_id.to_string() == *current_user_id)
+		})
+		.collect();
+
+	let partner_select = CreateSelectMenu::new(
+		partner_select_id,
+		CreateSelectMenuKind::String {
+			options: partner_select_options,
+		},
+	)
+	.placeholder("Partner");
+	let rep_select = CreateSelectMenu::new(
+		rep_select_id,
+		CreateSelectMenuKind::String {
+			options: rep_select_options,
+		},
+	)
+	.placeholder("Representative user");
+	let submit_button = CreateButton::new(submit_button_id)
+		.label("Submit")
+		.style(ButtonStyle::Danger)
+		.disabled(current_partner_id.is_empty() || current_user_id.is_empty());
+	let cancel_button = CreateButton::new(cancel_button_id)
+		.label("Cancel")
+		.style(ButtonStyle::Secondary);
+
+	let partner_row = CreateActionRow::SelectMenu(partner_select);
+	let rep_row = CreateActionRow::SelectMenu(rep_select);
+	let buttons_row = CreateActionRow::Buttons(vec![submit_button, cancel_button]);
+
+	let mut components = vec![partner_row];
+	if !reps.is_empty() {
+		components.push(rep_row);
+	}
+	components.push(buttons_row);
+
+	components
+}
+
 pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
 	let Some(guild) = command.guild_id else {
 		bail!("Partners command used outside of a guild");
@@ -71,37 +144,22 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 	let submit_button_id = cuid2::create_id();
 	let cancel_button_id = cuid2::create_id();
 
-	let partner_select_options: Vec<CreateSelectMenuOption> = partners
-		.iter()
-		.map(|partner| CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id))
-		.collect();
-
-	let partner_select = CreateSelectMenu::new(
-		&partner_select_id,
-		CreateSelectMenuKind::String {
-			options: partner_select_options,
-		},
-	)
-	.placeholder("Partner");
-	let rep_select = CreateSelectMenu::new(&rep_select_id, CreateSelectMenuKind::String { options: Vec::new() })
-		.placeholder("Representative user")
-		.disabled(true);
-	let submit_button = CreateButton::new(&submit_button_id)
-		.label("Submit")
-		.style(ButtonStyle::Danger)
-		.disabled(true);
-	let cancel_button = CreateButton::new(&cancel_button_id)
-		.label("Cancel")
-		.style(ButtonStyle::Secondary);
-
-	let partner_row = CreateActionRow::SelectMenu(partner_select);
-	let rep_row = CreateActionRow::SelectMenu(rep_select);
-	let buttons_row = CreateActionRow::Buttons(vec![submit_button, cancel_button]);
+	let components_data = ComponentsData {
+		partners: &partners,
+		reps: &Vec::new(),
+		current_partner_id: "",
+		current_user_id: "",
+		partner_select_id: &partner_select_id,
+		rep_select_id: &rep_select_id,
+		submit_button_id: &submit_button_id,
+		cancel_button_id: &cancel_button_id,
+	};
+	let components = components_to_display(components_data);
 
 	let message = CreateInteractionResponseMessage::new()
 		.ephemeral(true)
 		.content("Choose the partner server and the representative for that server to remove as a representative:")
-		.components(vec![partner_row, rep_row, buttons_row]);
+		.components(components);
 	command
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await
@@ -109,6 +167,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 
 	let mut partnership_id = String::new();
 	let mut user_id = String::new();
+	let mut current_partner_reps = Vec::new();
 
 	let interaction: ComponentInteraction = loop {
 		let Some(interaction) = ComponentInteractionCollector::new(&ctx.shard)
@@ -133,6 +192,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 				let value = values.first().cloned().unwrap_or_default();
 				if interaction.data.custom_id == partner_select_id {
 					partnership_id = value;
+					user_id = String::new();
 					interaction
 						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
 						.await
@@ -170,52 +230,44 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 						partner_reps.push((rep_id, name));
 					}
 
-					let partner_select_options: Vec<CreateSelectMenuOption> = partners
-						.iter()
-						.map(|partner| {
-							CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id)
-								.default_selection(partner.partnership_id == partnership_id)
-						})
-						.collect();
-					let rep_select_options: Vec<CreateSelectMenuOption> = partner_reps
-						.into_iter()
-						.map(|(rep_id, rep_name)| CreateSelectMenuOption::new(rep_name, rep_id.to_string()))
-						.collect();
+					current_partner_reps = partner_reps.clone();
 
-					let partner_select = CreateSelectMenu::new(
-						&partner_select_id,
-						CreateSelectMenuKind::String {
-							options: partner_select_options,
-						},
-					)
-					.placeholder("Partner");
-					let rep_select = CreateSelectMenu::new(
-						&rep_select_id,
-						CreateSelectMenuKind::String {
-							options: rep_select_options,
-						},
-					)
-					.placeholder("Representative user");
-					let submit_button = CreateButton::new(&submit_button_id)
-						.label("Submit")
-						.style(ButtonStyle::Danger);
-					let cancel_button = CreateButton::new(&cancel_button_id)
-						.label("Cancel")
-						.style(ButtonStyle::Secondary);
+					let components_data = ComponentsData {
+						partners: &partners,
+						reps: &partner_reps,
+						current_partner_id: &partnership_id,
+						current_user_id: &user_id,
+						partner_select_id: &partner_select_id,
+						rep_select_id: &rep_select_id,
+						submit_button_id: &submit_button_id,
+						cancel_button_id: &cancel_button_id,
+					};
+					let components = components_to_display(components_data);
 
-					let partner_row = CreateActionRow::SelectMenu(partner_select);
-					let rep_row = CreateActionRow::SelectMenu(rep_select);
-					let buttons_row = CreateActionRow::Buttons(vec![submit_button, cancel_button]);
-
-					let new_message =
-						EditInteractionResponse::new().components(vec![partner_row, rep_row, buttons_row]);
+					let new_message = EditInteractionResponse::new().components(components);
 					command.edit_response(&ctx.http, new_message).await.into_diagnostic()?;
 				} else if interaction.data.custom_id == rep_select_id {
 					user_id = value;
+
 					interaction
 						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
 						.await
 						.into_diagnostic()?;
+
+					let components_data = ComponentsData {
+						partners: &partners,
+						reps: &current_partner_reps,
+						current_partner_id: &partnership_id,
+						current_user_id: &user_id,
+						partner_select_id: &partner_select_id,
+						rep_select_id: &rep_select_id,
+						submit_button_id: &submit_button_id,
+						cancel_button_id: &cancel_button_id,
+					};
+					let components = components_to_display(components_data);
+
+					let new_message = EditInteractionResponse::new().components(components);
+					command.edit_response(&ctx.http, new_message).await.into_diagnostic()?;
 				}
 			}
 			ComponentInteractionDataKind::Button => {
