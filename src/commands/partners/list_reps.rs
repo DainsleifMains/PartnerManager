@@ -32,6 +32,17 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 			.into_diagnostic()?
 	};
 
+	if partners.is_empty() {
+		let message = CreateInteractionResponseMessage::new()
+			.ephemeral(true)
+			.content("You have no partners for which to list representatives.");
+		command
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
+		return Ok(());
+	}
+
 	let partner_select_options: Vec<CreateSelectMenuOption> = partners
 		.iter()
 		.map(|partner| CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id))
