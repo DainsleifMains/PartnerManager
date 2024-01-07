@@ -7,6 +7,7 @@ use serenity::model::permissions::Permissions;
 mod build_new;
 mod edit_category;
 mod edit_content;
+mod remove;
 mod reorder;
 
 pub fn definition() -> CreateCommand {
@@ -26,6 +27,7 @@ pub fn definition() -> CreateCommand {
 		"Edits the content of an embed",
 	);
 	let reorder_subcommand = CreateCommandOption::new(CommandOptionType::SubCommand, "reorder", "Reorders embeds");
+	let remove_subcommand = CreateCommandOption::new(CommandOptionType::SubCommand, "remove", "Removes an embed");
 
 	CreateCommand::new("partner_embed")
 		.kind(CommandType::ChatInput)
@@ -36,6 +38,7 @@ pub fn definition() -> CreateCommand {
 		.add_option(edit_category_subcommand)
 		.add_option(edit_content_subcommand)
 		.add_option(reorder_subcommand)
+		.add_option(remove_subcommand)
 }
 
 pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
@@ -51,6 +54,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		"edit_category" => edit_category::execute(ctx, command).await,
 		"edit_content" => edit_content::execute(ctx, command).await,
 		"reorder" => reorder::execute(ctx, command).await,
+		"remove" => remove::execute(ctx, command).await,
 		_ => bail!(
 			"Unexpected subcommand passed to the partner_embed command: {:?}",
 			subcommand
