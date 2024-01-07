@@ -17,7 +17,7 @@ pub struct PartnerCategory {
 	pub name: String,
 }
 
-#[derive(Insertable, Queryable)]
+#[derive(Clone, Insertable, Queryable)]
 #[diesel(table_name = embed_data)]
 pub struct EmbedData {
 	pub id: String,

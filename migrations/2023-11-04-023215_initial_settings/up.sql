@@ -20,7 +20,7 @@ CREATE TABLE embed_data (
 	embed_text TEXT NOT NULL,
 	image_url TEXT NOT NULL,
 	color INTEGER,
-	CONSTRAINT unique_index_per_guild UNIQUE (guild, embed_part_sequence_number),
+	CONSTRAINT unique_index_per_guild UNIQUE (guild, embed_part_sequence_number) DEFERRABLE INITIALLY DEFERRED,
 	CONSTRAINT unique_embed_name_per_guild UNIQUE (guild, embed_name)
 );
 
