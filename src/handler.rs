@@ -1,3 +1,4 @@
+use crate::sync::role::sync_all_roles_task;
 use serenity::async_trait;
 use serenity::model::application::{Command, Interaction};
 use serenity::model::gateway::Ready;
@@ -35,5 +36,15 @@ impl EventHandler for Handler {
 		Command::set_global_commands(&ctx.http, commands)
 			.await
 			.expect("Failed to register commands");
+
+		tokio::task::spawn(async move {
+			let sync_result = sync_all_roles_task(&ctx).await;
+			if let Err(error) = sync_result {
+				eprintln!(
+					"Syncing roles failed; roles will no longer automatically sync. {:?}",
+					error
+				);
+			}
+		});
 	}
 }

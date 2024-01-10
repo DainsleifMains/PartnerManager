@@ -1,5 +1,6 @@
 use crate::database::get_database_connection;
 use crate::schema::guild_settings;
+use crate::sync::role::sync_role_for_guild;
 use crate::utils::setup_check::GUILD_NOT_SET_UP;
 use diesel::prelude::*;
 use miette::{bail, ensure, IntoDiagnostic, Severity};
@@ -95,35 +96,41 @@ async fn set(ctx: &Context, command: &CommandInteraction, options: &[ResolvedOpt
 	let sql_role_id = role.as_ref().map(|role| role.id.get() as i64);
 
 	let db_connection = get_database_connection(ctx).await;
-	let mut db_connection = db_connection.lock().await;
+	let old_role = {
+		let mut db_connection = db_connection.lock().await;
 
-	let old_role: Option<Option<i64>> = guild_settings::table
-		.find(sql_guild_id)
-		.select(guild_settings::partner_role)
-		.first(&mut *db_connection)
-		.optional()
-		.into_diagnostic()?;
-	let old_role = match old_role {
-		Some(role) => role,
-		None => {
-			let message = CreateInteractionResponseMessage::new()
-				.ephemeral(true)
-				.content(GUILD_NOT_SET_UP);
-			command
-				.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-				.await
-				.into_diagnostic()?;
-			return Ok(());
-		}
+		let old_role: Option<Option<i64>> = guild_settings::table
+			.find(sql_guild_id)
+			.select(guild_settings::partner_role)
+			.first(&mut *db_connection)
+			.optional()
+			.into_diagnostic()?;
+		let old_role = match old_role {
+			Some(role) => role,
+			None => {
+				let message = CreateInteractionResponseMessage::new()
+					.ephemeral(true)
+					.content(GUILD_NOT_SET_UP);
+				command
+					.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+					.await
+					.into_diagnostic()?;
+				return Ok(());
+			}
+		};
+
+		diesel::update(guild_settings::table)
+			.filter(guild_settings::guild_id.eq(sql_guild_id))
+			.set(guild_settings::partner_role.eq(sql_role_id))
+			.execute(&mut *db_connection)
+			.into_diagnostic()?;
+
+		old_role
 	};
 
-	diesel::update(guild_settings::table)
-		.filter(guild_settings::guild_id.eq(sql_guild_id))
-		.set(guild_settings::partner_role.eq(sql_role_id))
-		.execute(&mut *db_connection)
-		.into_diagnostic()?;
-
-	// TODO: Update the role assigned to partner users
+	if let Some(role) = role {
+		sync_role_for_guild(ctx, guild, role.id).await?;
+	}
 
 	let message = match (role.as_ref(), old_role) {
 		(Some(role), Some(old_role)) => CreateInteractionResponseMessage::new().content(format!(

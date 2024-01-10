@@ -1,7 +1,8 @@
 use crate::database::get_database_connection;
-use crate::models::Partner;
-use crate::schema::partners;
-use crate::utils::setup_check::guild_setup_check_with_reply;
+use crate::models::{GuildSettings, Partner};
+use crate::schema::{guild_settings, partners};
+use crate::sync::role::sync_role_for_guild;
+use crate::utils::setup_check::GUILD_NOT_SET_UP;
 use diesel::prelude::*;
 use miette::{bail, IntoDiagnostic};
 use serenity::builder::{
@@ -13,6 +14,7 @@ use serenity::collector::ComponentInteractionCollector;
 use serenity::model::application::{
 	ButtonStyle, CommandInteraction, ComponentInteraction, ComponentInteractionDataKind,
 };
+use serenity::model::id::RoleId;
 use std::time::Duration;
 
 pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
@@ -22,16 +24,36 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 
 	let sql_guild_id = guild.get() as i64;
 	let db_connection = get_database_connection(ctx).await;
-	let partners: Vec<Partner> = {
+	let (partner_role, partners) = {
 		let mut db_connection = db_connection.lock().await;
-		if !guild_setup_check_with_reply(ctx, command, guild, &mut db_connection).await? {
-			return Ok(());
-		}
 
-		partners::table
+		let guild_settings: Option<GuildSettings> = guild_settings::table
+			.find(sql_guild_id)
+			.first(&mut *db_connection)
+			.optional()
+			.into_diagnostic()?;
+		let guild_settings = match guild_settings {
+			Some(settings) => settings,
+			None => {
+				let message = CreateInteractionResponseMessage::new()
+					.ephemeral(true)
+					.content(GUILD_NOT_SET_UP);
+				command
+					.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+					.await
+					.into_diagnostic()?;
+				return Ok(());
+			}
+		};
+
+		let partner_role = guild_settings.partner_role.map(|role| RoleId::new(role as u64));
+
+		let partners: Vec<Partner> = partners::table
 			.filter(partners::guild.eq(sql_guild_id))
 			.load(&mut *db_connection)
-			.into_diagnostic()?
+			.into_diagnostic()?;
+
+		(partner_role, partners)
 	};
 
 	if partners.is_empty() {
@@ -151,14 +173,18 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		bail!("Partner selection desynchronized with partner list");
 	};
 
-	let mut db_connection = db_connection.lock().await;
-	diesel::delete(partners::table)
-		.filter(partners::partnership_id.eq(&partner_id))
-		.execute(&mut *db_connection)
-		.into_diagnostic()?;
+	{
+		let mut db_connection = db_connection.lock().await;
+		diesel::delete(partners::table)
+			.filter(partners::partnership_id.eq(&partner_id))
+			.execute(&mut *db_connection)
+			.into_diagnostic()?;
+	}
 
 	// TODO update embed
-	// TODO role sync
+	if let Some(partner_role) = partner_role {
+		sync_role_for_guild(ctx, guild, partner_role).await?;
+	}
 
 	let message =
 		CreateInteractionResponseMessage::new().content(format!("Removed {} as a partner.", partner_display_name));

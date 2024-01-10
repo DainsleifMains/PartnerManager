@@ -7,3 +7,6 @@ A Discord bot to help manage partnerships with other Discord servers. Currently,
 - Manage Roles
 
 The partner management bot role must also be ranked higher than the partner role for your server.
+
+## Required Intents
+In order to synchronize the partner role, the Guild Members intent must be configured.

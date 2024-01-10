@@ -16,6 +16,7 @@ use handler::Handler;
 mod commands;
 mod models;
 mod schema;
+mod sync;
 mod utils;
 
 #[tokio::main]
@@ -27,7 +28,7 @@ async fn main() -> miette::Result<()> {
 
 	let db_connection = Arc::new(Mutex::new(db_connection));
 
-	let intents = GatewayIntents::empty();
+	let intents = GatewayIntents::GUILD_MEMBERS;
 
 	let mut client = Client::builder(&config.discord_bot_token, intents)
 		.event_handler(Handler)
