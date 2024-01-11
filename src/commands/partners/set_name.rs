@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::Partner;
 use crate::schema::partners;
+use crate::sync::embed::update_embed;
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DbError};
@@ -152,11 +153,14 @@ pub async fn execute(
 		return Ok(());
 	}
 
-	let mut db_connection = db_connection.lock().await;
-	let partner_update_result: QueryResult<Partner> = diesel::update(partners::table)
-		.filter(partners::partnership_id.eq(&partner_id))
-		.set(partners::display_name.eq(&new_name))
-		.get_result(&mut *db_connection);
+	let partner_update_result = {
+		let mut db_connection = db_connection.lock().await;
+		let partner_update_result: QueryResult<Partner> = diesel::update(partners::table)
+			.filter(partners::partnership_id.eq(&partner_id))
+			.set(partners::display_name.eq(&new_name))
+			.get_result(&mut *db_connection);
+		partner_update_result
+	};
 
 	let message = match partner_update_result {
 		Ok(partner) => CreateInteractionResponseMessage::new()
@@ -173,6 +177,8 @@ pub async fn execute(
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await
 		.into_diagnostic()?;
+
+	update_embed(ctx, guild).await?;
 
 	Ok(())
 }

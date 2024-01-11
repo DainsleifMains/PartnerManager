@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::EmbedData;
 use crate::schema::embed_data;
+use crate::sync::embed::update_embed;
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use miette::{bail, IntoDiagnostic};
@@ -183,22 +184,26 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		}
 	}
 
-	let mut db_connection = db_connection.lock().await;
-	let embed_update: QueryResult<()> = db_connection.transaction(|db_connection| {
-		for (embed_index, embed) in reordered_embeds.iter().enumerate() {
-			let embed_number = (embed_index + 1) as i32;
-			diesel::update(embed_data::table)
-				.filter(embed_data::id.eq(&embed.id))
-				.set(embed_data::embed_part_sequence_number.eq(embed_number))
-				.execute(db_connection)?;
-		}
+	{
+		let mut db_connection = db_connection.lock().await;
+		let embed_update: QueryResult<()> = db_connection.transaction(|db_connection| {
+			for (embed_index, embed) in reordered_embeds.iter().enumerate() {
+				let embed_number = (embed_index + 1) as i32;
+				diesel::update(embed_data::table)
+					.filter(embed_data::id.eq(&embed.id))
+					.set(embed_data::embed_part_sequence_number.eq(embed_number))
+					.execute(db_connection)?;
+			}
 
-		Ok(())
-	});
-	embed_update.into_diagnostic()?;
+			Ok(())
+		});
+		embed_update.into_diagnostic()?;
 
-	let message = EditInteractionResponse::new().components(Vec::new());
-	command.edit_response(&ctx.http, message).await.into_diagnostic()?;
+		let message = EditInteractionResponse::new().components(Vec::new());
+		command.edit_response(&ctx.http, message).await.into_diagnostic()?;
+	}
+
+	update_embed(ctx, guild).await?;
 
 	Ok(())
 }

@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::{EmbedData, PartnerCategory};
 use crate::schema::{embed_data, partner_categories};
+use crate::sync::embed::update_embed;
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::dsl::max;
 use diesel::prelude::*;
@@ -186,51 +187,55 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		}
 	};
 
-	let mut db_connection = db_connection.lock().await;
-	let last_embed_number: Option<i32> = embed_data::table
-		.filter(embed_data::guild.eq(sql_guild_id))
-		.select(max(embed_data::embed_part_sequence_number))
-		.first(&mut *db_connection)
-		.into_diagnostic()?;
-	let next_embed_number = last_embed_number.unwrap_or(0) + 1;
-	let embed_data = EmbedData {
-		id: cuid2::create_id(),
-		guild: sql_guild_id,
-		embed_part_sequence_number: next_embed_number,
-		embed_name: name.clone(),
-		partner_category_list: if partner_category.is_empty() {
-			None
-		} else {
-			Some(partner_category)
-		},
-		embed_text,
-		image_url,
-		color,
-	};
-
-	let insert_result = diesel::insert_into(embed_data::table)
-		.values(embed_data)
-		.execute(&mut *db_connection);
-	let message = match insert_result {
-		Ok(_) => CreateInteractionResponseMessage::new().content(format!("Successfully added new embed: {}", name)),
-		Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, violation_info)) => {
-			if violation_info.constraint_name() == Some("unique_embed_name_per_guild") {
-				CreateInteractionResponseMessage::new()
-					.ephemeral(true)
-					.content(format!("The embed name {} is already in use for another embed.", name))
+	{
+		let mut db_connection = db_connection.lock().await;
+		let last_embed_number: Option<i32> = embed_data::table
+			.filter(embed_data::guild.eq(sql_guild_id))
+			.select(max(embed_data::embed_part_sequence_number))
+			.first(&mut *db_connection)
+			.into_diagnostic()?;
+		let next_embed_number = last_embed_number.unwrap_or(0) + 1;
+		let embed_data = EmbedData {
+			id: cuid2::create_id(),
+			guild: sql_guild_id,
+			embed_part_sequence_number: next_embed_number,
+			embed_name: name.clone(),
+			partner_category_list: if partner_category.is_empty() {
+				None
 			} else {
-				bail!(DbError::DatabaseError(
-					DatabaseErrorKind::UniqueViolation,
-					violation_info
-				));
+				Some(partner_category)
+			},
+			embed_text,
+			image_url,
+			color,
+		};
+
+		let insert_result = diesel::insert_into(embed_data::table)
+			.values(embed_data)
+			.execute(&mut *db_connection);
+		let message = match insert_result {
+			Ok(_) => CreateInteractionResponseMessage::new().content(format!("Successfully added new embed: {}", name)),
+			Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, violation_info)) => {
+				if violation_info.constraint_name() == Some("unique_embed_name_per_guild") {
+					CreateInteractionResponseMessage::new()
+						.ephemeral(true)
+						.content(format!("The embed name {} is already in use for another embed.", name))
+				} else {
+					bail!(DbError::DatabaseError(
+						DatabaseErrorKind::UniqueViolation,
+						violation_info
+					));
+				}
 			}
-		}
-		Err(error) => bail!(error),
-	};
-	modal_interaction
-		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-		.await
-		.into_diagnostic()?;
+			Err(error) => bail!(error),
+		};
+		modal_interaction
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
+	}
+
+	update_embed(ctx, guild).await?;
 
 	Ok(())
 }

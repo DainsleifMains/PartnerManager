@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::{GuildSettings, Partner};
 use crate::schema::{guild_settings, partners};
+use crate::sync::embed::update_embed;
 use crate::sync::role::sync_role_for_guild;
 use crate::utils::setup_check::GUILD_NOT_SET_UP;
 use diesel::prelude::*;
@@ -192,6 +193,8 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await
 		.into_diagnostic()?;
+
+	update_embed(ctx, guild).await?;
 
 	Ok(())
 }

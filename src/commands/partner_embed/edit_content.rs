@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::EmbedData;
 use crate::schema::embed_data;
+use crate::sync::embed::update_embed;
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DbError};
@@ -186,43 +187,47 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		}
 	};
 
-	let mut db_connection = db_connection.lock().await;
-	let update_result = diesel::update(embed_data::table)
-		.filter(embed_data::id.eq(&embed.id))
-		.set((
-			embed_data::embed_name.eq(new_embed_name),
-			embed_data::embed_text.eq(new_embed_text),
-			embed_data::image_url.eq(new_image_url),
-			embed_data::color.eq(new_color),
-		))
-		.execute(&mut *db_connection);
-	match update_result {
-		Ok(_) => {
-			let message = CreateInteractionResponseMessage::new()
-				.content(format!("Successfully updated the embed {}.", new_embed_name));
-			modal_response
-				.interaction
-				.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-				.await
-				.into_diagnostic()?;
+	{
+		let mut db_connection = db_connection.lock().await;
+		let update_result = diesel::update(embed_data::table)
+			.filter(embed_data::id.eq(&embed.id))
+			.set((
+				embed_data::embed_name.eq(new_embed_name),
+				embed_data::embed_text.eq(new_embed_text),
+				embed_data::image_url.eq(new_image_url),
+				embed_data::color.eq(new_color),
+			))
+			.execute(&mut *db_connection);
+		match update_result {
+			Ok(_) => {
+				let message = CreateInteractionResponseMessage::new()
+					.content(format!("Successfully updated the embed {}.", new_embed_name));
+				modal_response
+					.interaction
+					.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+					.await
+					.into_diagnostic()?;
+			}
+			Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, violation_info)) => {
+				let message_content = if violation_info.constraint_name() == Some("unique_embed_name_per_guild") {
+					"That embed name is already in use for a different embed."
+				} else {
+					"An unknown collision occurred with an existing embed."
+				};
+				let message = CreateInteractionResponseMessage::new()
+					.ephemeral(true)
+					.content(message_content);
+				modal_response
+					.interaction
+					.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+					.await
+					.into_diagnostic()?;
+			}
+			Err(error) => bail!(error),
 		}
-		Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, violation_info)) => {
-			let message_content = if violation_info.constraint_name() == Some("unique_embed_name_per_guild") {
-				"That embed name is already in use for a different embed."
-			} else {
-				"An unknown collision occurred with an existing embed."
-			};
-			let message = CreateInteractionResponseMessage::new()
-				.ephemeral(true)
-				.content(message_content);
-			modal_response
-				.interaction
-				.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-				.await
-				.into_diagnostic()?;
-		}
-		Err(error) => bail!(error),
 	}
+
+	update_embed(ctx, guild_id).await?;
 
 	Ok(())
 }

@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::{EmbedData, PartnerCategory};
 use crate::schema::{embed_data, partner_categories};
+use crate::sync::embed::update_embed;
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use miette::{bail, IntoDiagnostic};
@@ -189,25 +190,29 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		}
 	};
 
-	let mut db_connection = db_connection.lock().await;
-	diesel::update(embed_data::table)
-		.filter(embed_data::id.eq(&embed.id))
-		.set(embed_data::partner_category_list.eq(&category_id))
-		.execute(&mut *db_connection)
-		.into_diagnostic()?;
+	{
+		let mut db_connection = db_connection.lock().await;
+		diesel::update(embed_data::table)
+			.filter(embed_data::id.eq(&embed.id))
+			.set(embed_data::partner_category_list.eq(&category_id))
+			.execute(&mut *db_connection)
+			.into_diagnostic()?;
 
-	let message_content = match category {
-		Some(category) => format!(
-			"The embed {} was updated to display the category {}.",
-			embed.embed_name, category.name
-		),
-		None => String::from("The embed {} was updated to remove the partner category display."),
-	};
-	let message = CreateInteractionResponseMessage::new().content(message_content);
-	interaction
-		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-		.await
-		.into_diagnostic()?;
+		let message_content = match category {
+			Some(category) => format!(
+				"The embed {} was updated to display the category {}.",
+				embed.embed_name, category.name
+			),
+			None => String::from("The embed {} was updated to remove the partner category display."),
+		};
+		let message = CreateInteractionResponseMessage::new().content(message_content);
+		interaction
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
+	}
+
+	update_embed(ctx, guild).await?;
 
 	Ok(())
 }

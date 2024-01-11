@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::{Partner, PartnerCategory};
 use crate::schema::{partner_categories, partners};
+use crate::sync::embed::update_embed;
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DbError};
@@ -219,38 +220,41 @@ pub async fn execute(
 	}
 	let partner_guild = partner_guild.id;
 
-	let mut db_connection = db_connection.lock().await;
-	let selected_category: Option<PartnerCategory> = partner_categories::table
-		.filter(
-			partner_categories::id
-				.eq(&partner_category)
-				.and(partner_categories::guild_id.eq(sql_guild_id)),
-		)
-		.first(&mut *db_connection)
-		.optional()
-		.into_diagnostic()?;
-	if selected_category.is_none() {
-		let message = CreateInteractionResponseMessage::new()
-			.ephemeral(true)
-			.content("The category you selected is no longer valid.");
-		interaction
-			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
-			.await
+	let insert_result = {
+		let mut db_connection = db_connection.lock().await;
+		let selected_category: Option<PartnerCategory> = partner_categories::table
+			.filter(
+				partner_categories::id
+					.eq(&partner_category)
+					.and(partner_categories::guild_id.eq(sql_guild_id)),
+			)
+			.first(&mut *db_connection)
+			.optional()
 			.into_diagnostic()?;
-		return Ok(());
-	}
+		if selected_category.is_none() {
+			let message = CreateInteractionResponseMessage::new()
+				.ephemeral(true)
+				.content("The category you selected is no longer valid.");
+			interaction
+				.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+				.await
+				.into_diagnostic()?;
+			return Ok(());
+		}
 
-	let new_partner = Partner {
-		partnership_id: cuid2::create_id(),
-		guild: sql_guild_id,
-		category: partner_category,
-		partner_guild: partner_guild.get() as i64,
-		display_name: display_name.clone(),
-		invite_code: invite_code.to_string(),
+		let new_partner = Partner {
+			partnership_id: cuid2::create_id(),
+			guild: sql_guild_id,
+			category: partner_category,
+			partner_guild: partner_guild.get() as i64,
+			display_name: display_name.clone(),
+			invite_code: invite_code.to_string(),
+		};
+		let insert_result: QueryResult<_> = diesel::insert_into(partners::table)
+			.values(new_partner)
+			.execute(&mut *db_connection);
+		insert_result
 	};
-	let insert_result: QueryResult<_> = diesel::insert_into(partners::table)
-		.values(new_partner)
-		.execute(&mut *db_connection);
 
 	let message = match insert_result {
 		Ok(_) => CreateInteractionResponseMessage::new().content(format!(
@@ -271,6 +275,8 @@ pub async fn execute(
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await
 		.into_diagnostic()?;
+
+	update_embed(ctx, guild).await?;
 
 	Ok(())
 }
