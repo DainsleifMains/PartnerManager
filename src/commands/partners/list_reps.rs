@@ -1,12 +1,13 @@
 use crate::database::get_database_connection;
 use crate::models::Partner;
 use crate::schema::{partner_users, partners};
+use crate::utils::pagination::{get_partners_for_page, max_partner_page};
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use miette::{bail, IntoDiagnostic};
 use serenity::builder::{
 	CreateActionRow, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-	CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
+	CreateSelectMenuKind, EditInteractionResponse,
 };
 use serenity::client::Context;
 use serenity::collector::ComponentInteractionCollector;
@@ -43,10 +44,8 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		return Ok(());
 	}
 
-	let partner_select_options: Vec<CreateSelectMenuOption> = partners
-		.iter()
-		.map(|partner| CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id))
-		.collect();
+	let mut current_partner_page = 0;
+	let partner_select_options = get_partners_for_page(&partners, current_partner_page, "");
 
 	let partner_select_id = cuid2::create_id();
 	let partner_select = CreateSelectMenu::new(
@@ -82,7 +81,29 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 			ComponentInteractionDataKind::StringSelect { values } => {
 				let value = values.first().cloned().unwrap_or_default();
 				if interaction.data.custom_id == partner_select_id {
-					break (interaction, value);
+					if value == "<" {
+						current_partner_page = current_partner_page.saturating_sub(1);
+					} else if value == ">" {
+						current_partner_page = (current_partner_page + 1).min(max_partner_page(&partners));
+					} else {
+						break (interaction, value);
+					}
+
+					let partner_select_options = get_partners_for_page(&partners, current_partner_page, "");
+					let partner_select = CreateSelectMenu::new(
+						&partner_select_id,
+						CreateSelectMenuKind::String {
+							options: partner_select_options,
+						},
+					);
+					let partner_row = CreateActionRow::SelectMenu(partner_select);
+
+					let message = EditInteractionResponse::new().components(vec![partner_row]);
+					command.edit_response(&ctx.http, message).await.into_diagnostic()?;
+					interaction
+						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
+						.await
+						.into_diagnostic()?;
 				}
 			}
 			_ => bail!(

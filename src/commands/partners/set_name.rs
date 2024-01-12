@@ -2,13 +2,14 @@ use crate::database::get_database_connection;
 use crate::models::Partner;
 use crate::schema::partners;
 use crate::sync::embed::update_embed;
+use crate::utils::pagination::{get_partners_for_page, max_partner_page};
 use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DbError};
 use miette::{bail, ensure, IntoDiagnostic, Severity};
 use serenity::builder::{
 	CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-	CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
+	CreateSelectMenuKind, EditInteractionResponse,
 };
 use serenity::client::Context;
 use serenity::collector::ComponentInteractionCollector;
@@ -56,10 +57,19 @@ pub async fn execute(
 		);
 	};
 
-	let partner_select_options: Vec<CreateSelectMenuOption> = partners
-		.iter()
-		.map(|partner| CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id))
-		.collect();
+	if partners.is_empty() {
+		let message = CreateInteractionResponseMessage::new()
+			.ephemeral(true)
+			.content("You have no partners for which to set the name.");
+		command
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
+			.await
+			.into_diagnostic()?;
+		return Ok(());
+	}
+
+	let mut current_partner_page = 0;
+	let partner_select_options = get_partners_for_page(&partners, current_partner_page, "");
 
 	let partner_select_id = cuid2::create_id();
 	let submit_button_id = cuid2::create_id();
@@ -85,7 +95,7 @@ pub async fn execute(
 	let message = CreateInteractionResponseMessage::new()
 		.ephemeral(true)
 		.content("Select the partner to set the name:")
-		.components(vec![partner_row, buttons_row]);
+		.components(vec![partner_row, buttons_row.clone()]);
 	command
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await
@@ -113,11 +123,31 @@ pub async fn execute(
 			ComponentInteractionDataKind::StringSelect { values } => {
 				let value = values.first().cloned().unwrap_or_default();
 				if interaction.data.custom_id == partner_select_id {
-					partner_id = value;
 					interaction
 						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
 						.await
 						.into_diagnostic()?;
+					if value == "<" {
+						current_partner_page = current_partner_page.saturating_sub(1);
+					} else if value == ">" {
+						current_partner_page = (current_partner_page + 1).min(max_partner_page(&partners));
+					} else {
+						partner_id = value;
+						continue;
+					}
+
+					let partner_select_options = get_partners_for_page(&partners, current_partner_page, &partner_id);
+					let partner_select = CreateSelectMenu::new(
+						&partner_select_id,
+						CreateSelectMenuKind::String {
+							options: partner_select_options,
+						},
+					)
+					.placeholder("Partner");
+					let partner_row = CreateActionRow::SelectMenu(partner_select);
+
+					let message = EditInteractionResponse::new().components(vec![partner_row, buttons_row.clone()]);
+					command.edit_response(&ctx.http, message).await.into_diagnostic()?;
 				}
 			}
 			ComponentInteractionDataKind::Button => {

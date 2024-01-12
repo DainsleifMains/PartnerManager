@@ -1,6 +1,7 @@
 use crate::database::get_database_connection;
 use crate::models::Partner;
 use crate::schema::{guild_settings, partner_users, partners};
+use crate::utils::pagination::{get_partners_for_page, max_partner_page};
 use crate::utils::setup_check::GUILD_NOT_SET_UP;
 use diesel::dsl::count_star;
 use diesel::prelude::*;
@@ -23,6 +24,7 @@ use std::time::Duration;
 struct ComponentsData<'a> {
 	partners: &'a [Partner],
 	reps: &'a [(u64, String)],
+	current_partner_page: usize,
 	current_partner_id: &'a str,
 	current_user_id: &'a str,
 	partner_select_id: &'a str,
@@ -35,6 +37,7 @@ fn components_to_display(component_data: ComponentsData) -> Vec<CreateActionRow>
 	let ComponentsData {
 		partners,
 		reps,
+		current_partner_page,
 		current_partner_id,
 		current_user_id,
 		partner_select_id,
@@ -43,13 +46,7 @@ fn components_to_display(component_data: ComponentsData) -> Vec<CreateActionRow>
 		cancel_button_id,
 	} = component_data;
 
-	let partner_select_options: Vec<CreateSelectMenuOption> = partners
-		.iter()
-		.map(|partner| {
-			CreateSelectMenuOption::new(&partner.display_name, &partner.partnership_id)
-				.default_selection(partner.partnership_id == *current_partner_id)
-		})
-		.collect();
+	let partner_select_options = get_partners_for_page(partners, current_partner_page, current_partner_id);
 	let rep_select_options: Vec<CreateSelectMenuOption> = reps
 		.iter()
 		.map(|(rep_id, rep_name)| {
@@ -139,6 +136,8 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		return Ok(());
 	}
 
+	let mut current_partner_page = 0;
+
 	let partner_select_id = cuid2::create_id();
 	let rep_select_id = cuid2::create_id();
 	let submit_button_id = cuid2::create_id();
@@ -147,6 +146,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 	let components_data = ComponentsData {
 		partners: &partners,
 		reps: &Vec::new(),
+		current_partner_page,
 		current_partner_id: "",
 		current_user_id: "",
 		partner_select_id: &partner_select_id,
@@ -191,19 +191,31 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 			ComponentInteractionDataKind::StringSelect { values } => {
 				let value = values.first().cloned().unwrap_or_default();
 				if interaction.data.custom_id == partner_select_id {
-					partnership_id = value;
+					if value == "<" {
+						partnership_id = String::new();
+						current_partner_page = current_partner_page.saturating_sub(1);
+					} else if value == ">" {
+						partnership_id = String::new();
+						current_partner_page = (current_partner_page + 1).min(max_partner_page(&partners));
+					} else {
+						partnership_id = value;
+					}
 					user_id = String::new();
 					interaction
 						.create_response(&ctx.http, CreateInteractionResponse::Acknowledge)
 						.await
 						.into_diagnostic()?;
 
-					let mut db_connection = db_connection.lock().await;
-					let partner_rep_ids: Vec<i64> = partner_users::table
-						.filter(partner_users::partnership_id.eq(&partnership_id))
-						.select(partner_users::user_id)
-						.load(&mut *db_connection)
-						.into_diagnostic()?;
+					let partner_rep_ids: Vec<i64> = if partnership_id.is_empty() {
+						Vec::new()
+					} else {
+						let mut db_connection = db_connection.lock().await;
+						partner_users::table
+							.filter(partner_users::partnership_id.eq(&partnership_id))
+							.select(partner_users::user_id)
+							.load(&mut *db_connection)
+							.into_diagnostic()?
+					};
 					let partner_rep_ids: Vec<u64> = partner_rep_ids.into_iter().map(|user_id| user_id as u64).collect();
 					let mut partner_reps: Vec<(u64, String)> = Vec::with_capacity(partner_rep_ids.len());
 					for rep_id in partner_rep_ids {
@@ -235,6 +247,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 					let components_data = ComponentsData {
 						partners: &partners,
 						reps: &partner_reps,
+						current_partner_page,
 						current_partner_id: &partnership_id,
 						current_user_id: &user_id,
 						partner_select_id: &partner_select_id,
@@ -257,6 +270,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 					let components_data = ComponentsData {
 						partners: &partners,
 						reps: &current_partner_reps,
+						current_partner_page,
 						current_partner_id: &partnership_id,
 						current_user_id: &user_id,
 						partner_select_id: &partner_select_id,
