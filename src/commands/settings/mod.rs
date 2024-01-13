@@ -44,7 +44,7 @@ pub fn definition() -> CreateCommand {
 	let set_partner_role_command = CreateCommandOption::new(
 		CommandOptionType::SubCommand,
 		"set",
-		"Sets the role assigned to all partner reprsesntatives",
+		"Sets the role assigned to all partner representatives",
 	)
 	.add_sub_option(
 		CreateCommandOption::new(
