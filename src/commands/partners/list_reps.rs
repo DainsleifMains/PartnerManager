@@ -29,6 +29,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 
 		partners::table
 			.filter(partners::guild.eq(sql_guild_id))
+			.order(partners::display_name.asc())
 			.load(&mut *db_connection)
 			.into_diagnostic()?
 	};
