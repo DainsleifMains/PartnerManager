@@ -79,6 +79,15 @@ pub async fn execute(
 	);
 
 	let invite_code = parse_invite(invite_link);
+
+	// Sometimes, when parsing the invite code, it can maintain an initial slash before the actual code.
+	// Somehow, this doesn't seem to break anything in Serenity, and Discord seems to accept it just fine (or Serenity
+	// removes the slash), but we want not to have it.
+	let invite_code = match invite_code.strip_prefix('/') {
+		Some(code) => code,
+		None => invite_code
+	};
+
 	let invite = match Invite::get(ctx, invite_code, false, true, None).await {
 		Ok(invite) => invite,
 		Err(_) => {
