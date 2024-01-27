@@ -108,11 +108,11 @@ pub async fn execute(
 	};
 
 	if invite.expires_at.is_some() {
-		let messsage = CreateInteractionResponseMessage::new()
+		let message = CreateInteractionResponseMessage::new()
 			.ephemeral(true)
 			.content("The invite link is not permanent.");
 		command
-			.create_response(&ctx.http, CreateInteractionResponse::Message(messsage))
+			.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 			.await
 			.into_diagnostic()?;
 		return Ok(());
