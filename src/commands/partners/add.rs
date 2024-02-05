@@ -85,7 +85,7 @@ pub async fn execute(
 	// removes the slash), but we want not to have it.
 	let invite_code = match invite_code.strip_prefix('/') {
 		Some(code) => code,
-		None => invite_code
+		None => invite_code,
 	};
 
 	let invite = match Invite::get(ctx, invite_code, false, true, None).await {

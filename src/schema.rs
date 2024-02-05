@@ -30,6 +30,13 @@ diesel::table! {
 }
 
 diesel::table! {
+	partner_self_users (partnership, user_id) {
+		partnership -> Text,
+		user_id -> Int8,
+	}
+}
+
+diesel::table! {
 	partner_users (partnership_id, user_id) {
 		partnership_id -> Text,
 		user_id -> Int8,
@@ -57,6 +64,7 @@ diesel::table! {
 diesel::joinable!(embed_data -> guild_settings (guild));
 diesel::joinable!(embed_data -> partner_categories (partner_category_list));
 diesel::joinable!(partner_categories -> guild_settings (guild_id));
+diesel::joinable!(partner_self_users -> partners (partnership));
 diesel::joinable!(partner_users -> partners (partnership_id));
 diesel::joinable!(partners -> guild_settings (guild));
 diesel::joinable!(partners -> partner_categories (category));
@@ -66,6 +74,7 @@ diesel::allow_tables_to_appear_in_same_query!(
 	embed_data,
 	guild_settings,
 	partner_categories,
+	partner_self_users,
 	partner_users,
 	partners,
 	published_messages,

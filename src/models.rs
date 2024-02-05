@@ -1,4 +1,6 @@
-use crate::schema::{embed_data, guild_settings, partner_categories, partner_users, partners, published_messages};
+use crate::schema::{
+	embed_data, guild_settings, partner_categories, partner_self_users, partner_users, partners, published_messages,
+};
 use diesel::prelude::*;
 
 #[derive(Insertable, Queryable)]
@@ -50,4 +52,10 @@ pub struct PartnerUser {
 pub struct PublishedMessage {
 	pub guild_id: i64,
 	pub message_id: i64,
+}
+
+#[derive(Insertable, Queryable)]
+pub struct PartnerSelfUser {
+	pub partnership: String,
+	pub user_id: i64,
 }

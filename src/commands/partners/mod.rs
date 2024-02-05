@@ -6,9 +6,12 @@ use serenity::model::permissions::Permissions;
 
 mod add;
 mod add_rep;
+mod add_self_rep;
 mod list_reps;
+mod list_self_reps;
 mod remove;
 mod remove_rep;
+mod remove_self_rep;
 mod set_category;
 mod set_name;
 
@@ -61,6 +64,22 @@ pub fn definition() -> CreateCommand {
 	)
 	.add_sub_option(new_name);
 
+	let add_self_representative_command = CreateCommandOption::new(
+		CommandOptionType::SubCommand,
+		"add_self_rep",
+		"Adds our representative for a server",
+	);
+	let list_self_representative_command = CreateCommandOption::new(
+		CommandOptionType::SubCommand,
+		"list_self_reps",
+		"Lists our representatives to the partner",
+	);
+	let remove_self_representative_command = CreateCommandOption::new(
+		CommandOptionType::SubCommand,
+		"remove_self_rep",
+		"Remove one of our representatives for a partner",
+	);
+
 	CreateCommand::new("partners")
 		.kind(CommandType::ChatInput)
 		.default_member_permissions(Permissions::MANAGE_GUILD)
@@ -73,6 +92,9 @@ pub fn definition() -> CreateCommand {
 		.add_option(remove_representative_command)
 		.add_option(set_category_command)
 		.add_option(set_name_command)
+		.add_option(add_self_representative_command)
+		.add_option(list_self_representative_command)
+		.add_option(remove_self_representative_command)
 }
 
 pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
@@ -89,9 +111,12 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 	match subcommand.name {
 		"add" => add::execute(ctx, command, subcommand_options).await,
 		"add_rep" => add_rep::execute(ctx, command).await,
+		"add_self_rep" => add_self_rep::execute(ctx, command).await,
 		"list_reps" => list_reps::execute(ctx, command).await,
+		"list_self_reps" => list_self_reps::execute(ctx, command).await,
 		"remove" => remove::execute(ctx, command).await,
 		"remove_rep" => remove_rep::execute(ctx, command).await,
+		"remove_self_rep" => remove_self_rep::execute(ctx, command).await,
 		"set_category" => set_category::execute(ctx, command).await,
 		"set_name" => set_name::execute(ctx, command, subcommand_options).await,
 		_ => bail!("Unexpected subcommand for partners command: {:?}", subcommand),
