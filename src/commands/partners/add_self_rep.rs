@@ -7,8 +7,8 @@ use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DbError};
 use miette::{bail, IntoDiagnostic};
 use serenity::builder::{
-	CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-	CreateSelectMenuKind, EditInteractionResponse,
+	CreateActionRow, CreateAllowedMentions, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage,
+	CreateSelectMenu, CreateSelectMenuKind, EditInteractionResponse,
 };
 use serenity::client::Context;
 use serenity::collector::ComponentInteractionCollector;
@@ -210,22 +210,27 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 
 	match insert_result {
 		Ok(_) => {
-			let message = CreateInteractionResponseMessage::new().content(format!(
-				"Added <@{}> as our representative for {}.",
-				user.get(),
-				partner.display_name
-			));
+			let message = CreateInteractionResponseMessage::new()
+				.content(format!(
+					"Added <@{}> as our representative for {}.",
+					user.get(),
+					partner.display_name
+				))
+				.allowed_mentions(CreateAllowedMentions::new());
 			interaction
 				.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 				.await
 				.into_diagnostic()?;
 		}
 		Err(DbError::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
-			let message = CreateInteractionResponseMessage::new().ephemeral(true).content(format!(
-				"<@{}> is already your representative for {}",
-				user.get(),
-				partner.display_name
-			));
+			let message = CreateInteractionResponseMessage::new()
+				.ephemeral(true)
+				.content(format!(
+					"<@{}> is already your representative for {}",
+					user.get(),
+					partner.display_name
+				))
+				.allowed_mentions(CreateAllowedMentions::new());
 			interaction
 				.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 				.await

@@ -6,8 +6,8 @@ use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use miette::{bail, IntoDiagnostic};
 use serenity::builder::{
-	CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-	CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
+	CreateActionRow, CreateAllowedMentions, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage,
+	CreateSelectMenu, CreateSelectMenuKind, CreateSelectMenuOption, EditInteractionResponse,
 };
 use serenity::client::Context;
 use serenity::collector::ComponentInteractionCollector;
@@ -335,7 +335,9 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		"Removed <@{}> as a representative for {}.",
 		user_id, partner_display_name
 	);
-	let message = CreateInteractionResponseMessage::new().content(message_content);
+	let message = CreateInteractionResponseMessage::new()
+		.content(message_content)
+		.allowed_mentions(CreateAllowedMentions::new());
 	interaction
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await

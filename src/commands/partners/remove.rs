@@ -8,8 +8,8 @@ use crate::utils::setup_check::GUILD_NOT_SET_UP;
 use diesel::prelude::*;
 use miette::{bail, IntoDiagnostic};
 use serenity::builder::{
-	CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-	CreateSelectMenuKind, EditInteractionResponse,
+	CreateActionRow, CreateAllowedMentions, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage,
+	CreateSelectMenu, CreateSelectMenuKind, EditInteractionResponse,
 };
 use serenity::client::Context;
 use serenity::collector::ComponentInteractionCollector;
@@ -208,8 +208,9 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		sync_role_for_guild(ctx, guild, partner_role).await?;
 	}
 
-	let message =
-		CreateInteractionResponseMessage::new().content(format!("Removed {} as a partner.", partner_display_name));
+	let message = CreateInteractionResponseMessage::new()
+		.content(format!("Removed {} as a partner.", partner_display_name))
+		.allowed_mentions(CreateAllowedMentions::new());
 	interaction
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await

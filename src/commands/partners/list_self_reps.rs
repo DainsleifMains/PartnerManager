@@ -6,8 +6,8 @@ use crate::utils::setup_check::guild_setup_check_with_reply;
 use diesel::prelude::*;
 use miette::{bail, IntoDiagnostic};
 use serenity::builder::{
-	CreateActionRow, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-	CreateSelectMenuKind, EditInteractionResponse,
+	CreateActionRow, CreateAllowedMentions, CreateInteractionResponse, CreateInteractionResponseMessage,
+	CreateSelectMenu, CreateSelectMenuKind, EditInteractionResponse,
 };
 use serenity::client::Context;
 use serenity::collector::ComponentInteractionCollector;
@@ -144,7 +144,9 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		message_lines.push(format!("- <@{}>", user.get()));
 	}
 	let message = message_lines.join("\n");
-	let message = CreateInteractionResponseMessage::new().content(message);
+	let message = CreateInteractionResponseMessage::new()
+		.content(message)
+		.allowed_mentions(CreateAllowedMentions::new());
 	interaction
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await

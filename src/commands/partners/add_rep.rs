@@ -7,8 +7,8 @@ use diesel::prelude::*;
 use diesel::result::{DatabaseErrorKind, Error as DbError};
 use miette::{bail, IntoDiagnostic};
 use serenity::builder::{
-	CreateActionRow, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage, CreateSelectMenu,
-	CreateSelectMenuKind, EditInteractionResponse,
+	CreateActionRow, CreateAllowedMentions, CreateButton, CreateInteractionResponse, CreateInteractionResponseMessage,
+	CreateSelectMenu, CreateSelectMenuKind, EditInteractionResponse,
 };
 use serenity::client::Context;
 use serenity::collector::ComponentInteractionCollector;
@@ -293,7 +293,9 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 	if complain_about_role_permissions {
 		message_content = format!("{}\n**The bot does not have the correct permissions to update partner roles. You will need to add the partner role manually.**", message_content);
 	}
-	let message = CreateInteractionResponseMessage::new().content(message_content);
+	let message = CreateInteractionResponseMessage::new()
+		.content(message_content)
+		.allowed_mentions(CreateAllowedMentions::new());
 	interaction
 		.create_response(&ctx.http, CreateInteractionResponse::Message(message))
 		.await
