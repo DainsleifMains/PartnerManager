@@ -14,6 +14,7 @@ mod remove_rep;
 mod remove_self_rep;
 mod set_category;
 mod set_name;
+mod user_rep_list;
 
 pub fn definition() -> CreateCommand {
 	let partner_add_invite_link = CreateCommandOption::new(
@@ -80,6 +81,19 @@ pub fn definition() -> CreateCommand {
 		"Remove one of our representatives for a partner",
 	);
 
+	let partner_rep_list_user = CreateCommandOption::new(
+		CommandOptionType::User,
+		"user",
+		"The user for which to list servers represented",
+	)
+	.required(true);
+	let user_rep_list = CreateCommandOption::new(
+		CommandOptionType::SubCommand,
+		"user_rep_list",
+		"Lists servers represented by a user and for which that user represents us",
+	)
+	.add_sub_option(partner_rep_list_user);
+
 	CreateCommand::new("partners")
 		.kind(CommandType::ChatInput)
 		.default_member_permissions(Permissions::MANAGE_GUILD)
@@ -95,6 +109,7 @@ pub fn definition() -> CreateCommand {
 		.add_option(add_self_representative_command)
 		.add_option(list_self_representative_command)
 		.add_option(remove_self_representative_command)
+		.add_option(user_rep_list)
 }
 
 pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Result<()> {
@@ -119,6 +134,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 		"remove_self_rep" => remove_self_rep::execute(ctx, command).await,
 		"set_category" => set_category::execute(ctx, command).await,
 		"set_name" => set_name::execute(ctx, command, subcommand_options).await,
+		"user_rep_list" => user_rep_list::execute(ctx, command, subcommand_options).await,
 		_ => bail!("Unexpected subcommand for partners command: {:?}", subcommand),
 	}
 }
