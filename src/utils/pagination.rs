@@ -1,7 +1,7 @@
 use crate::models::Partner;
 use serenity::builder::CreateSelectMenuOption;
 
-const PARTNER_PAGE_LEN: usize = 20;
+const PARTNER_PAGE_LEN: usize = 23;
 
 /// Gets the highest page number for a partner list
 pub fn max_partner_page(partners: &[Partner]) -> usize {
