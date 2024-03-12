@@ -1044,7 +1044,7 @@ dependencies = [
 
 [[package]]
 name = "partner-management"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "cuid2",
  "diesel",
