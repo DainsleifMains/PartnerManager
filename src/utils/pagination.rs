@@ -23,7 +23,7 @@ pub fn get_partners_for_page(
 		return Vec::new();
 	}
 
-	let mut options: Vec<CreateSelectMenuOption> = Vec::with_capacity(22);
+	let mut options: Vec<CreateSelectMenuOption> = Vec::with_capacity(PARTNER_PAGE_LEN + 2);
 	if page_number > 0 {
 		options.push(CreateSelectMenuOption::new("Previous Page", "<"));
 	}
