@@ -225,7 +225,7 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 						partner_reps.push((rep_id, name));
 					}
 
-					current_partner_reps = partner_reps.clone();
+					current_partner_reps.clone_from(&partner_reps);
 
 					let components_data = ComponentsData {
 						partners: &partners,
