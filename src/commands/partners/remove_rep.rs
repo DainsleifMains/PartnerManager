@@ -332,6 +332,15 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 	let sql_user_id = user_id as i64;
 	let mut db_connection = db_connection.lock().await;
 
+	diesel::delete(partner_users::table)
+		.filter(
+			partner_users::partnership_id
+				.eq(&partnership_id)
+				.and(partner_users::user_id.eq(sql_user_id)),
+		)
+		.execute(&mut *db_connection)
+		.into_diagnostic()?;
+
 	let mut complain_about_role_permissions = false;
 	if let Some(partner_role_id) = partner_role_id {
 		let remaining_representing: i64 = partner_users::table
@@ -380,15 +389,6 @@ pub async fn execute(ctx: &Context, command: &CommandInteraction) -> miette::Res
 	let Some(partner_display_name) = partner_display_name else {
 		bail!("Partner selections desynchronized with partner list");
 	};
-
-	diesel::delete(partner_users::table)
-		.filter(
-			partner_users::partnership_id
-				.eq(&partnership_id)
-				.and(partner_users::user_id.eq(sql_user_id)),
-		)
-		.execute(&mut *db_connection)
-		.into_diagnostic()?;
 
 	let mut message_content = format!(
 		"Removed <@{}> as a representative for {}.",
