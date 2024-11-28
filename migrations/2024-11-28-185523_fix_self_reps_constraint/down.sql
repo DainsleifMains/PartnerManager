@@ -1,0 +1,2 @@
+ALTER TABLE partner_self_users DROP CONSTRAINT partner_self_users_partnership_fkey;
+ALTER TABLE partner_self_users ADD CONSTRAINT partner_self_users_partnership_fkey FOREIGN KEY (partnership) REFERENCES partners;
