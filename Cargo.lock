@@ -1269,7 +1269,7 @@ dependencies = [
 
 [[package]]
 name = "partner-management"
-version = "1.1.4"
+version = "1.1.5"
 dependencies = [
  "cuid2",
  "diesel",
